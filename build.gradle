@@ -99,7 +99,6 @@ dependencies {
     runtimeOnly "org.lwjgl:lwjgl-opengl::$lwjglNatives"
 
     // Lombok
-    implementation 'org.projectlombok:lombok:1.18.28'
     annotationProcessor 'org.projectlombok:lombok:1.18.28'
     compileOnly 'org.projectlombok:lombok:1.18.28'
 
@@ -131,7 +130,9 @@ dependencies {
 
     implementation 'it.unimi.dsi:fastutil:8.5.13'
     implementation 'org.joml:joml:1.10.7'
-    implementation 'org.jetbrains:annotations:24.1.0'
+    compileOnly 'org.jetbrains:annotations:24.1.0'
+
+    implementation 'com.madgag:animated-gif-lib:1.4'
 
     implementation fileTree(dir: 'libs', include: '*.jar')
     compileOnly fileTree(dir: 'libs', include: '*.jar')
