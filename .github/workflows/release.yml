@@ -47,7 +47,7 @@ jobs:
 
       - name: Rename and Move Files to Root
         run: |
-          mv ${BUILD_DIR}/${{ env.BUILD_NAME }}.jar ${GITHUB_WORKSPACE}/${BUILD_NAME}.jar
+          mv ${BUILD_DIR}/${{ env.BUILD_NAME }}-1.8.9-all.jar ${GITHUB_WORKSPACE}/${BUILD_NAME}.jar
           mv ${JSON_DIR}/${{ env.BUILD_NAME }}.jar.json ${GITHUB_WORKSPACE}/${BUILD_NAME}.json
 
       - name: Create release build 
