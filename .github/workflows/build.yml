@@ -10,8 +10,7 @@ on:
 env:
   JAVA_VERSION: 17
   GRADLE_TASK: shadowJar
-  JAR_NAME: Moonlight.jar
-  JSON_NAME: Moonlight.json
+  BUILD_NAME: Moonlight
   BUILD_DIR: build/libs
   JSON_DIR: json
 
@@ -48,21 +47,13 @@ jobs:
 
       - name: Rename and Move Files to Root
         run: |
-          mv ${BUILD_DIR}/${{ env.JAR_NAME }}.jar ${GITHUB_WORKSPACE}/${JAR_NAME}
-          mv ${JSON_DIR}/${{ env.JSON_NAME }}.json ${GITHUB_WORKSPACE}/${JSON_NAME}
+          mv ${BUILD_DIR}/${{ env.BUILD_NAME }}.jar ${GITHUB_WORKSPACE}/${BUILD_NAME}.jar
+          mv ${JSON_DIR}/${{ env.BUILD_NAME }}.json ${GITHUB_WORKSPACE}/${BUILD_NAME}.json
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Moonlight
-          path: |
-            ${{ env.JAR_NAME }}
-            ${{ env.JSON_NAME }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.JAR_NAME }}
           path: |
             ${{ env.JAR_NAME }}
             ${{ env.JSON_NAME }}
