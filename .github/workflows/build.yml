@@ -47,7 +47,6 @@ jobs:
 
       - name: Rename and Move Files to Root
         run: |
-          ls -R
           mv ${GITHUB_WORKSPACE}/${BUILD_DIR}/${{ env.BUILD_NAME }}-1.8.9-all.jar ${GITHUB_WORKSPACE}/${BUILD_NAME}.jar
           mv ${GITHUB_WORKSPACE}/${JSON_DIR}/${{ env.BUILD_NAME }}.json ${GITHUB_WORKSPACE}/${BUILD_NAME}.json
 
