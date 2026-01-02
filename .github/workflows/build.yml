@@ -48,7 +48,7 @@ jobs:
       - name: Rename and Move Files to Root
         run: |
           mv ${BUILD_DIR}/${{ env.BUILD_NAME }}.jar ${GITHUB_WORKSPACE}/${BUILD_NAME}.jar
-          mv ${JSON_DIR}/${{ env.BUILD_NAME }}.json ${GITHUB_WORKSPACE}/${BUILD_NAME}.json
+          mv ${JSON_DIR}/${{ env.BUILD_NAME }}.jar.json ${GITHUB_WORKSPACE}/${BUILD_NAME}.json
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
