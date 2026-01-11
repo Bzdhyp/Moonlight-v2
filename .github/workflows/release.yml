@@ -1,0 +1,86 @@
+name: Release build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: 17
+  GRADLE_TASK: shadowJar
+  BUILD_NAME: Moonlight
+  BUILD_DIR: build/libs
+  JSON_DIR: json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'Release')
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Configure Gradle Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper/
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant Execute Permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build Project with Gradle
+        run: ./gradlew ${{ env.GRADLE_TASK }} --no-daemon
+
+      - name: Rename and Move Files to Root
+        run: |
+          mv ${GITHUB_WORKSPACE}/${BUILD_DIR}/${{ env.BUILD_NAME }}-1.8.9-all.jar ${GITHUB_WORKSPACE}/${BUILD_NAME}.jar
+          mv ${GITHUB_WORKSPACE}/${JSON_DIR}/${{ env.BUILD_NAME }}.json ${GITHUB_WORKSPACE}/${BUILD_NAME}.json
+
+      - name: Create release build 
+        uses: ChanTsune/release-with-commit@v3.0.0
+        id: create_release
+        continue-on-error: true
+        with:
+          regexp: "Release (\\d+([.]\\d+)*)\n*((\\s|\\S)+)"
+          regexp_options: "us"
+          release_name: "${{ env.BUILD_NAME }}: v$1"
+          tag_name: "v$1"
+          body: "$3"
+          draft: true
+          prerelease: false
+        env:
+            GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+      - name: Upload Build Jar
+        continue-on-error: true
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+          asset_path: ./${{ env.BUILD_NAME }}.jar
+          asset_name: ${{ env.BUILD_NAME }}.jar
+          asset_content_type: application/java-archive
+      - name: Upload JSON files
+        continue-on-error: true
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+          asset_path: ./${{ env.BUILD_NAME }}.json
+          asset_name: ${{ env.BUILD_NAME }}.json
+          asset_content_type: application/json
