@@ -1,0 +1,16 @@
+{
+  "name": "Moonlight",
+  "version": "1.8.9",
+  "mainJar": "build/libs/Moonlight-1.8.9-all.jar",
+  "releaseFile": "build/libs/Moonlight-1.8.9-all.jar",
+  "minimumLauncherVersion": "1",
+  "supportedLaunchers": [
+    "any",
+    "desktop",
+    "mobile"
+  ],
+  "launchMode": "customJar",
+  "mainClass": "Start",
+  "minecraftVersion": "1.8.9",
+  "notes": "Use the all-in-one JAR from build/libs. Set Minecraft version to 1.8.9 if the launcher asks. Compatible with desktop launchers that accept a custom client JAR and with mobile launchers that support custom client import."
+}
