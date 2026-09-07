@@ -59,14 +59,14 @@ dependencies {
 repositories {
     mavenCentral()
     maven {
-        url 'https://repo.marcloud.net/'
-        name 'MarCloud-Repository'
+        url = 'https://repo.marcloud.net/'
+        name = 'MarCloud-Repository'
     }
     maven {
-        url "https://libraries.minecraft.net/"
+        url = "https://libraries.minecraft.net/"
     }
     maven {
-        url "https://mvnrepository.com/artifact"
+        url = "https://mvnrepository.com/artifact"
     }
 }
 
