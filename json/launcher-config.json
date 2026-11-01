@@ -1,0 +1,12 @@
+{
+  "clientFile": "build/libs/Moonlight-1.8.9-all.jar",
+  "mainClass": "Start",
+  "minecraftVersion": "1.8.9",
+  "arguments": [],
+  "javaArgs": [],
+  "useAllInOneJar": true,
+  "launchHints": {
+    "desktop": "Use the all-in-one JAR directly in launchers that accept a custom client JAR or a main-class launch.",
+    "mobile": "If the launcher supports custom client import, use the all-in-one JAR and keep the client version set to 1.8.9. If the launcher requires a mobile-specific client package, this repo does not generate that automatically."
+  }
+}
