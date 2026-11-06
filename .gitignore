@@ -1,49 +1,46 @@
+# gradle
 
-/run/
-/out/
-/build/
-/.settings/
-/bin/
-/.gradle/
-/.kotlin/
-/logs/
-/ViaMCP/
-/Moonlight/
-/assets/
-/saves/
-/resourcepacks/
-/shaderpacks/
+.gradle/
+.kotlin/
+build/
+out/
+classes/
 
 # eclipse
-eclipse
-bin
+
 *.launch
-.settings
-.metadata
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+
+.settings/
+.vscode/
+bin/
 .classpath
 .project
 
-# idea
-out
-classes
-*.ipr
-*.iws
-*.iml
-.idea
+# os
 
-# gradle
-build
-.gradle
-
-#Netbeans
-.nb-gradle
-.nb-gradle-properties
-
-# other
-run
 .DS_Store
 Thumbs.db
-usercache.json
-servers.dat
-options.txt
-optionsof.txt
+
+# minecraft
+
+run/
+
+# java
+
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# local
+
+/skid/

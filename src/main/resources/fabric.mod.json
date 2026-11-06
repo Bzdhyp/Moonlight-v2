@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "Moonlight client for Minecraft 26.3.",
+  "authors": [
+    "GzSakura1338"
+  ],
+  "license": "GPL-3.0-only",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "wtf.moonlight.fabric.MoonlightFabric"
+    ],
+    "client": [
+      "wtf.moonlight.fabric.MoonlightFabricClient"
+    ]
+  },
+  "mixins": [
+    "moonlight.mixins.json"
+  ],
+  "accessWidener": "moonlight.ct",
+  "depends": {
+    "fabricloader": ">=${loader}",
+    "minecraft": "${minecraft}",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

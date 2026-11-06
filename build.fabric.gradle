@@ -1,0 +1,68 @@
+plugins {
+    id "net.fabricmc.fabric-loom" version "1.19.3"
+}
+
+def javaVersion = 25
+def modId = property("mod.id").toString()
+def modVersion = property("mod.version").toString()
+def fabricLoader = property("deps.fabric_loader").toString()
+
+version = "${modVersion}+${sc.current.version}".toString()
+base.archivesName = modId + "-fabric"
+
+dependencies {
+    minecraft "com.mojang:minecraft:${sc.current.version}"
+    implementation "net.fabricmc:fabric-loader:${fabricLoader}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${property("deps.fabric_api")}"
+}
+
+loom {
+    fabricModJsonPath = rootProject.file("src/main/resources/fabric.mod.json")
+    accessWidenerPath = rootProject.file("src/main/resources/moonlight.ct")
+
+    decompilerOptions.named("vineflower") {
+        options.put("mark-corresponding-synthetics", "1")
+    }
+
+    runConfigs.configureEach {
+        ideConfigGenerated(true)
+        runDir("../../run")
+        vmArg("-Dmixin.debug.export=true")
+    }
+}
+
+java {
+    withSourcesJar()
+    toolchain.languageVersion = JavaLanguageVersion.of(javaVersion)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}
+
+def resourceProps = [
+        id       : modId,
+        name     : property("mod.name").toString(),
+        version  : modVersion,
+        minecraft: property("mod.mc_compat").toString(),
+        loader   : (fabricLoader =~ /\d+\.\d+/)[0].toString(),
+]
+def mixinJava = "JAVA_" + javaVersion
+
+processResources {
+    inputs.properties(resourceProps)
+
+    filesMatching("fabric.mod.json") { expand(resourceProps) }
+    filesMatching("*.mixins.json") { expand(java: mixinJava) }
+
+    exclude("META-INF/neoforge.mods.toml")
+}
+
+tasks.register("buildAndCollect", Copy) {
+    group = "build"
+    description = "Builds mod jars and copies results to `build/libs/{mod version}/`"
+
+    inputs.property("version", modVersion)
+    from(tasks.named("jar").flatMap { it.archiveFile }, tasks.named("sourcesJar").flatMap { it.archiveFile })
+    into(rootProject.layout.buildDirectory.dir("libs/" + modVersion))
+}
