@@ -268,6 +268,7 @@ public interface MinecraftAccessor {
 
 ```
 Moonlight                  ← 根项目（控制器）
+├─ Tasks → build           → buildAllJars（一次构建两个加载器）
 ├─ Tasks → stonecutter     ← 切换激活节点
 ├─ 26.3-fabric
 │   └─ Tasks → build       → build、buildAndCollect
@@ -276,9 +277,11 @@ Moonlight                  ← 根项目（控制器）
     └─ Tasks → build       → build、buildAndCollect
 ```
 
-- 构建 Fabric 版：双击 `26.3-fabric → Tasks → build → build`
-- 构建 NeoForge 版：双击 `26.3-neoforge → Tasks → build → build`
-- 根项目的 Tasks 里没有 `build`，要去两个子项目下面找。
+- **同时构建 Fabric 和 NeoForge**：双击 `Moonlight → Tasks → build → buildAllJars`，两边的 jar 会汇总到根目录的 `build/libs/<版本>/`。
+- 只构建 Fabric 版：双击 `26.3-fabric → Tasks → build → build`
+- 只构建 NeoForge 版：双击 `26.3-neoforge → Tasks → build → build`
+
+`buildAllJars` 定义在 `stonecutter.gradle`，依赖所有节点的 `buildAndCollect`。以后新增 Minecraft 版本节点时会自动包含进去，不用改这个任务。
 
 ### 8.2 命令行
 
@@ -286,8 +289,8 @@ Moonlight                  ← 根项目（控制器）
 |---|---|
 | 只构建 Fabric | `./gradlew :26.3-fabric:build` |
 | 只构建 NeoForge | `./gradlew :26.3-neoforge:build` |
-| 两个都构建 | `./gradlew build` |
-| 构建并把 jar 汇总到 `build/libs/<版本>/` | `./gradlew buildAndCollect` |
+| 两个都构建，并把 jar 汇总到 `build/libs/<版本>/` | `./gradlew buildAllJars` |
+| 两个都构建（不汇总） | `./gradlew build` |
 | 启动 Fabric 客户端 | `./gradlew :26.3-fabric:runClient` |
 | 启动 NeoForge 客户端 | `./gradlew :26.3-neoforge:runClient` |
 
@@ -295,7 +298,14 @@ Moonlight                  ← 根项目（控制器）
 
 - `versions/26.3-fabric/build/libs/moonlight-fabric-<版本>+26.3.jar`
 - `versions/26.3-neoforge/build/libs/moonlight-neoforge-<版本>+26.3.jar`
-- 运行 `buildAndCollect` 后，两边的 jar 和源码 jar 都会复制到 `build/libs/<版本>/`
+- 运行 `buildAllJars` 后，两边的 jar 和源码 jar 都会复制到 `build/libs/<版本>/`：
+  ```
+  build/libs/0.1.0/
+  ├─ moonlight-fabric-0.1.0+26.3.jar
+  ├─ moonlight-fabric-0.1.0+26.3-sources.jar
+  ├─ moonlight-neoforge-0.1.0+26.3.jar
+  └─ moonlight-neoforge-0.1.0+26.3-sources.jar
+  ```
 
 两个加载器共用 `run/` 作为游戏目录（存档、配置、日志都在里面）。
 
@@ -303,6 +313,7 @@ Moonlight                  ← 根项目（控制器）
 
 - `org.gradle.parallel=false`：两个节点不并行构建。NeoForge 的 Minecraft 重编译很吃内存，并行时容易把电脑跑卡。
 - `org.gradle.configuration-cache=true`：开启配置缓存。修改构建脚本时注意第 10 节的写法要求。
+- `dev.kikugie.stonecutter.hard_mode=true`：关闭 Stonecutter 每次构建都打印的"推荐使用 Kotlin DSL"提示。项目有意使用 Groovy。
 
 ---
 

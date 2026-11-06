@@ -11,3 +11,9 @@ stonecutter.parameters { node ->
     node.constants.match(loader, "fabric", "neoforge")
     node.swaps.put("mod_version", node.project.provider { "\"${node.project.property("mod.version")}\";".toString() })
 }
+
+tasks.register("buildAllJars") {
+    group = "build"
+    description = "Builds the Fabric and NeoForge jars and collects them into build/libs/{mod version}/"
+    dependsOn(subprojects.collect { it.path + ":buildAndCollect" })
+}
