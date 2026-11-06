@@ -10,10 +10,23 @@ def fabricLoader = property("deps.fabric_loader").toString()
 version = "${modVersion}+${sc.current.version}".toString()
 base.archivesName = modId + "-fabric"
 
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "DevAuth"
+                url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1"
+            }
+        }
+        filter { includeGroup("me.djtheredstoner") }
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${sc.current.version}"
     implementation "net.fabricmc:fabric-loader:${fabricLoader}"
     implementation "net.fabricmc.fabric-api:fabric-api:${property("deps.fabric_api")}"
+    runtimeOnly "me.djtheredstoner:DevAuth-fabric:${property("deps.devauth")}"
 }
 
 loom {
@@ -25,9 +38,31 @@ loom {
     }
 
     runConfigs.configureEach {
-        ideConfigGenerated(true)
+        ideConfigGenerated(false)
         runDir("../../run")
         vmArg("-Dmixin.debug.export=true")
+    }
+
+    runConfigs.matching { it.name == "client" }.configureEach {
+        vmArg("-Ddevauth.enabled=true")
+    }
+}
+
+def fabricProject = project
+
+gradle.projectsEvaluated {
+    def runClient = fabricProject.tasks.named("runClient").get()
+    def configureLaunch = fabricProject.tasks.named("configureClientLaunch").get()
+    def runConfigurations = fabricProject.rootProject.idea.project.settings.runConfigurations
+
+    runConfigurations.create(fabricProject.name, org.jetbrains.gradle.ext.Application) { app ->
+        app.mainClass = runClient.mainClass.get()
+        app.moduleRef(fabricProject, fabricProject.sourceSets.main)
+        app.jvmArgs = runClient.allJvmArgs.findAll { !it.startsWith("@") && !it.startsWith("-Duser.") }.join(" ")
+        app.workingDirectory = fabricProject.rootProject.file("run").absolutePath
+        app.shortenCommandLine = org.jetbrains.gradle.ext.ShortenCommandLine.ARGS_FILE
+        app.beforeRun.create("Configure Launch", org.jetbrains.gradle.ext.GradleTask) { it.task = configureLaunch }
+        app.beforeRun.create("Build", org.jetbrains.gradle.ext.Make)
     }
 }
 

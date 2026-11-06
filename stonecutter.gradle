@@ -1,5 +1,6 @@
 plugins {
     id "dev.kikugie.stonecutter"
+    id "org.jetbrains.gradle.plugin.idea-ext" version "1.2"
 }
 
 stonecutter.active "26.3-fabric"
@@ -16,4 +17,9 @@ tasks.register("buildAllJars") {
     group = "build"
     description = "Builds the Fabric and NeoForge jars and collects them into build/libs/{mod version}/"
     dependsOn(subprojects.collect { it.path + ":buildAndCollect" })
+}
+
+idea.project.settings.runConfigurations.create("Build All Jars", org.jetbrains.gradle.ext.Gradle) { config ->
+    config.taskNames = ["buildAllJars"]
+    config.projectPath = rootDir.absolutePath
 }
