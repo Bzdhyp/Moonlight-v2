@@ -285,6 +285,22 @@ Moonlight                  ← 根项目（控制器）
 
 `buildAllJars` 定义在 `stonecutter.gradle`，依赖所有节点的 `buildAndCollect`。以后新增 Minecraft 版本节点时会自动包含进去，不用改这个任务。
 
+**根项目 Tasks 里为什么有 `fabric`、`mod development` 这些分组**
+
+IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是根项目自己的任务加上所有子项目的任务（同名的合并成一项）。所以 Loom 的 `fabric` 分组、ModDevGradle 的 `mod development` 分组、两边的 `build` / `jar` 等都会出现在根项目下。这是 Gradle 多项目构建的正常行为，不是配置错误。各分组的来源：
+
+| 分组 | 来源 |
+|---|---|
+| `fabric` | Loom（只有 26.3-fabric 有） |
+| `mod development`、`mod development/internal` | ModDevGradle（只有 26.3-neoforge 有） |
+| `stonecutter`、`stonecutter-impl` | Stonecutter（切换节点和它的内部任务） |
+| `ide` | `idea` 插件（由 idea-ext 带进来，用于生成运行配置） |
+| `build`、`documentation`、`verification`、`help`、`build setup`、`other` | Gradle 自带 |
+
+在根项目下双击一个任务，Gradle 会在**每个有这个任务的子项目里都执行一次**。例如根项目的 `build` 会同时构建两个加载器。`runClient` / `runServer` 也一样，会把 Fabric 和 NeoForge 的游戏依次全部启动，所以 `stonecutter.gradle` 里拦掉了这两个：在根项目直接运行它们会报错并提示正确用法。
+
+建议：根项目下只用 `build → buildAllJars` 和 `stonecutter` 分组；单个加载器的任务去 `26.3-fabric` / `26.3-neoforge` 节点下找；启动游戏用 IDEA 右上角的运行配置。
+
 ### 8.2 IDEA 的运行 / 调试配置
 
 每次 Gradle 同步完成后，IDEA 会自动在右上角的运行 / 调试配置里创建这三个：
@@ -343,6 +359,7 @@ Moonlight                  ← 根项目（控制器）
 
 - `org.gradle.parallel=false`：两个节点不并行构建。NeoForge 的 Minecraft 重编译很吃内存，并行时容易把电脑跑卡。
 - `org.gradle.configuration-cache=true`：开启配置缓存。修改构建脚本时注意第 10 节的写法要求。
+- `org.gradle.configuration-cache.problems=warn`：配置缓存遇到不兼容的写法时只警告、不中断构建。IDEA 设成"使用 Gradle 构建和运行"时，点应用程序类型的配置（`26.3-fabric`、`26.3-neoforge`），IDEA 会临时生成一个初始化脚本交给 Gradle 执行。这个脚本注册了构建监听器，还在执行阶段访问 `Task.project`，两者都不兼容配置缓存；不加这一行就会报 `Invocation of 'Task.project' ... is unsupported with the configuration cache`。平时构建仍然正常使用配置缓存，只是自己写的脚本出了兼容问题也只会显示成警告，要留意构建输出里的 `problems were found`。
 - `dev.kikugie.stonecutter.hard_mode=true`：关闭 Stonecutter 每次构建都打印的"推荐使用 Kotlin DSL"提示。项目有意使用 Groovy。
 
 ---

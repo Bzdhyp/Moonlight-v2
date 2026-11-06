@@ -19,6 +19,14 @@ tasks.register("buildAllJars") {
     dependsOn(subprojects.collect { it.path + ":buildAndCollect" })
 }
 
+def launchedFromRoot = gradle.startParameter.currentDir.canonicalFile == rootDir.canonicalFile
+def multiNodeRuns = gradle.startParameter.taskNames.findAll { it in ["runClient", "runServer"] }
+if (launchedFromRoot && multiNodeRuns) {
+    throw new GradleException("在根项目运行 ${multiNodeRuns.join(", ")} 会把所有节点（Fabric 和 NeoForge）依次全部启动。" +
+            "请改用 :<节点>:${multiNodeRuns[0]}（例如 :26.3-fabric:${multiNodeRuns[0]}），" +
+            "或者 IDEA 里的 26.3-fabric / 26.3-neoforge 运行配置。")
+}
+
 idea.project.settings.runConfigurations.create("Build All Jars", org.jetbrains.gradle.ext.Gradle) { config ->
     config.taskNames = ["buildAllJars"]
     config.projectPath = rootDir.absolutePath
