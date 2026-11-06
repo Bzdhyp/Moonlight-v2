@@ -3,7 +3,6 @@ mod.name = "Moonlight"
 mod.version = "0.1.0"
 
 deps.fabric_loader = "0.20.1"
-deps.devauth = "1.2.2"
 
 
 [fabric."26.3"]
