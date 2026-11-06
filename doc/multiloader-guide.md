@@ -270,7 +270,7 @@ public interface MinecraftAccessor {
 
 ```
 Moonlight                  ← 根项目（控制器）
-├─ Tasks → build           → buildAllJars（一次构建两个加载器）
+├─ Tasks → application     → 26.3-fabric-client、26.3-neoforge-client、buildAllJars
 ├─ Tasks → stonecutter     ← 切换激活节点
 ├─ 26.3-fabric
 │   └─ Tasks → build       → build、buildAndCollect
@@ -279,11 +279,18 @@ Moonlight                  ← 根项目（控制器）
     └─ Tasks → build       → build、buildAndCollect
 ```
 
-- **同时构建 Fabric 和 NeoForge**：双击 `Moonlight → Tasks → build → buildAllJars`，两边的 jar 会汇总到根目录的 `build/libs/<版本>/`。
+日常使用只看根项目的 `application` 分组：
+
+| 任务 | 作用 |
+|---|---|
+| `26.3-fabric-client` | 启动 Fabric 客户端（执行 `:26.3-fabric:runClient`） |
+| `26.3-neoforge-client` | 启动 NeoForge 客户端（执行 `:26.3-neoforge:runClient`） |
+| `buildAllJars` | 同时构建 Fabric 和 NeoForge，jar 汇总到根目录的 `build/libs/<版本>/` |
+
+- 这三个任务都定义在 `stonecutter.gradle`。`<节点>-client` 按子项目自动生成，`buildAllJars` 依赖所有节点的 `buildAndCollect`，以后新增 Minecraft 版本节点时都会自动包含，不用改。
+- 右键这些任务选"调试"，IDEA 会把调试器挂到游戏进程上。
 - 只构建 Fabric 版：双击 `26.3-fabric → Tasks → build → build`
 - 只构建 NeoForge 版：双击 `26.3-neoforge → Tasks → build → build`
-
-`buildAllJars` 定义在 `stonecutter.gradle`，依赖所有节点的 `buildAndCollect`。以后新增 Minecraft 版本节点时会自动包含进去，不用改这个任务。
 
 **根项目 Tasks 里为什么有 `fabric`、`mod development` 这些分组**
 
@@ -297,27 +304,29 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 | `ide` | `idea` 插件（由 idea-ext 带进来，用于生成运行配置） |
 | `build`、`documentation`、`verification`、`help`、`build setup`、`other` | Gradle 自带 |
 
-在根项目下双击一个任务，Gradle 会在**每个有这个任务的子项目里都执行一次**。例如根项目的 `build` 会同时构建两个加载器。`runClient` / `runServer` 也一样，会把 Fabric 和 NeoForge 的游戏依次全部启动，所以 `stonecutter.gradle` 里拦掉了这两个：在根项目直接运行它们会报错并提示正确用法。
+在根项目下双击一个任务，Gradle 会在**每个有这个任务的子项目里都执行一次**。例如根项目的 `build` 会同时构建两个加载器。`runClient` / `runServer` 也一样，会把 Fabric 和 NeoForge 的游戏依次全部启动，所以 `stonecutter.gradle` 里拦掉了这两个：在根项目直接运行它们（比如双击根项目 `fabric` 分组下的 `runClient`）会报错，并提示改用 `application` 分组里的任务。
 
-建议：根项目下只用 `build → buildAllJars` 和 `stonecutter` 分组；单个加载器的任务去 `26.3-fabric` / `26.3-neoforge` 节点下找；启动游戏用 IDEA 右上角的运行配置。
+建议：根项目下只用 `application` 和 `stonecutter` 两个分组；其他单个加载器的任务去 `26.3-fabric` / `26.3-neoforge` 节点下找。
 
 ### 8.2 IDEA 的运行 / 调试配置
 
-每次 Gradle 同步完成后，IDEA 会自动在右上角的运行 / 调试配置里创建这三个：
+每次 Gradle 同步完成后，IDEA 会自动在右上角的运行 / 调试配置里创建这五个，全部是 Gradle 类型：
 
-| 配置 | 类型 | 由谁生成 | 作用 |
-|---|---|---|---|
-| `26.3-fabric` | 应用程序 | `build.fabric.gradle` | 启动 Fabric 客户端 |
-| `26.3-neoforge` | 应用程序 | ModDevGradle（`build.neoforge.gradle` 的 `runs.client`） | 启动 NeoForge 客户端 |
-| `Build All Jars` | Gradle | `stonecutter.gradle` | 运行 `buildAllJars` |
+| 配置 | 执行的 Gradle 任务 | 作用 |
+|---|---|---|
+| `26.3-fabric-client` | `:26.3-fabric:runClient` | 启动 Fabric 客户端 |
+| `26.3-fabric-server` | `:26.3-fabric:runServer` | 启动 Fabric 服务端 |
+| `26.3-neoforge-client` | `:26.3-neoforge:runClient` | 启动 NeoForge 客户端 |
+| `26.3-neoforge-server` | `:26.3-neoforge:runServer` | 启动 NeoForge 服务端 |
+| `buildAllJars` | `buildAllJars` | 同时构建两个加载器的 jar |
 
 实现方式：
 
-- 根项目应用了 JetBrains 的 `idea-ext` 插件（1.2，和 ModDevGradle 内部用的是同一个版本）。配置写进 `idea.project.settings.runConfigurations`，IDEA 同步时读取并创建，不需要在仓库里放 `.run` / `.idea` 的 xml 文件。
-- `26.3-fabric` 的主类和 JVM 参数直接从 Loom 的 `runClient` 任务读取，所以在 `loom.runConfigs` 里加的 JVM 参数（比如 DevAuth、`-Dmixin.debug.export`）会自动带上。启动前会先执行 `configureClientLaunch`（生成 `launch.cfg`），再编译。
-- Loom 自己生成 IDEA 运行配置的功能已经关闭（`ideConfigGenerated(false)`）。它只在第一次同步时往 `.idea/runConfigurations` 写一次 xml，IDEA 经常识别不到。
-- NeoForge 的服务端运行配置设了 `disableIdeRun()`，不进 IDEA 列表。需要时用 Gradle 任务 `:26.3-neoforge:runServer` 或 `:26.3-fabric:runServer` 启动。
-- 同步不会删除旧的配置。以前同步留下的 `26.3-neoforge - Client` / `26.3-neoforge - Server` 需要在"编辑配置"里手动删一次。
+- 根项目应用了 JetBrains 的 `idea-ext` 插件（1.2，和 ModDevGradle 内部用的是同一个版本）。这五个配置都在 `stonecutter.gradle` 里注册到 `idea.project.settings.runConfigurations`，IDEA 同步时读取并创建，不需要在仓库里放 `.run` / `.idea` 的 xml 文件。
+- `<节点>-client` / `<节点>-server` 按子项目自动生成，以后新增版本节点会自动多出对应的配置。
+- 配置直接执行 Loom / ModDevGradle 的 `runClient` / `runServer` 任务，所以构建脚本里给运行加的参数（DevAuth、`-Dmixin.debug.export` 等）、启动前的准备任务（生成 `launch.cfg`、下载资源、NeoForge 的 `prepareClientRun`）都由 Gradle 处理，和命令行运行完全一致。点"调试"时 IDEA 会把调试器挂到 Gradle 启动的游戏进程上。
+- 加载器自己生成的 IDE 运行配置都已关闭：Loom 是 `ideConfigGenerated(false)`，ModDevGradle 是两个 `runs` 里的 `disableIdeRun()`。否则同步后会多出它们默认的"应用程序"类型配置。
+- 同步不会删除旧的配置。以前留下的 `26.3-fabric`、`26.3-neoforge`、`26.3-neoforge - Client`、`26.3-neoforge - Server`、`Build All Jars`，以及上一版生成的"应用程序"类型的 `26.3-*-client` / `26.3-*-server`，需要在"编辑配置"里手动删一次，再重新同步。`Moonlight-v2-NextGen [xxx]` 这种是双击 Gradle 任务时 IDEA 自动生成的临时配置，可以不管。
 
 ### 8.3 命令行
 
@@ -326,6 +335,7 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 | 只构建 Fabric | `./gradlew :26.3-fabric:build` |
 | 只构建 NeoForge | `./gradlew :26.3-neoforge:build` |
 | 两个都构建，并把 jar 汇总到 `build/libs/<版本>/` | `./gradlew buildAllJars` |
+| 启动 Fabric / NeoForge 客户端（等同下面两行） | `./gradlew 26.3-fabric-client` / `./gradlew 26.3-neoforge-client` |
 | 两个都构建（不汇总） | `./gradlew build` |
 | 启动 Fabric 客户端 | `./gradlew :26.3-fabric:runClient` |
 | 启动 NeoForge 客户端 | `./gradlew :26.3-neoforge:runClient` |
@@ -349,7 +359,7 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 
 两个加载器都以 `runtimeOnly` 引入了 [DevAuth](https://github.com/DJtheRedstoner/DevAuth)（版本在 `stonecutter.properties.toml` 的 `deps.devauth`）。它只在开发环境运行时生效，**不会打进发布的 jar**。
 
-- 只有**客户端**运行带了 `-Ddevauth.enabled=true`：Fabric 在 `build.fabric.gradle` 的 `runConfigs`（client）里，NeoForge 在 `build.neoforge.gradle` 的 `runs.client` 里。IDEA 的 `26.3-fabric`、`26.3-neoforge` 配置都会带上。
+- 只有**客户端**运行带了 `-Ddevauth.enabled=true`：Fabric 在 `build.fabric.gradle` 的 `runConfigs`（client）里，NeoForge 在 `build.neoforge.gradle` 的 `runs.client` 里。IDEA 的 `26.3-fabric-client`、`26.3-neoforge-client` 配置都会带上，服务端配置不带。
 - 第一次启动客户端时，控制台会打出一个微软登录链接，在浏览器里登录授权后就会用这个账号进游戏。令牌保存在 `C:\Users\<用户名>\.devauth\microsoft_accounts.json`，之后会自动续期。**这个文件不要分享给别人。**
 - 多个账号：在 `~/.devauth/config.toml` 里加账号，用 `-Ddevauth.account=<名字>` 选择要登录哪个。
 - 想临时用离线账号：把对应的启用参数改成 `false`，或者删掉那一行，然后重新同步 Gradle。
@@ -359,7 +369,7 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 
 - `org.gradle.parallel=false`：两个节点不并行构建。NeoForge 的 Minecraft 重编译很吃内存，并行时容易把电脑跑卡。
 - `org.gradle.configuration-cache=true`：开启配置缓存。修改构建脚本时注意第 10 节的写法要求。
-- `org.gradle.configuration-cache.problems=warn`：配置缓存遇到不兼容的写法时只警告、不中断构建。IDEA 设成"使用 Gradle 构建和运行"时，点应用程序类型的配置（`26.3-fabric`、`26.3-neoforge`），IDEA 会临时生成一个初始化脚本交给 Gradle 执行。这个脚本注册了构建监听器，还在执行阶段访问 `Task.project`，两者都不兼容配置缓存；不加这一行就会报 `Invocation of 'Task.project' ... is unsupported with the configuration cache`。平时构建仍然正常使用配置缓存，只是自己写的脚本出了兼容问题也只会显示成警告，要留意构建输出里的 `problems were found`。
+- `org.gradle.configuration-cache.problems=warn`：配置缓存遇到不兼容的写法时只警告、不中断构建。IDEA 设成"使用 Gradle 构建和运行"时，如果运行"应用程序"类型的配置（比如自己在 IDEA 里新建的），IDEA 会临时生成一个初始化脚本交给 Gradle 执行。这个脚本注册了构建监听器，还在执行阶段访问 `Task.project`，两者都不兼容配置缓存；不加这一行就会报 `Invocation of 'Task.project' ... is unsupported with the configuration cache`。平时构建仍然正常使用配置缓存，只是自己写的脚本出了兼容问题也只会显示成警告，要留意构建输出里的 `problems were found`。
 - `dev.kikugie.stonecutter.hard_mode=true`：关闭 Stonecutter 每次构建都打印的"推荐使用 Kotlin DSL"提示。项目有意使用 Groovy。
 
 ---

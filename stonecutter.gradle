@@ -14,20 +14,41 @@ stonecutter.parameters { node ->
 }
 
 tasks.register("buildAllJars") {
-    group = "build"
+    group = "application"
     description = "Builds the Fabric and NeoForge jars and collects them into build/libs/{mod version}/"
     dependsOn(subprojects.collect { it.path + ":buildAndCollect" })
+}
+
+def clientTasks = subprojects.collect { node ->
+    def name = node.name + "-client"
+    tasks.register(name) {
+        group = "application"
+        description = "Starts the " + node.name + " client (" + node.path + ":runClient)"
+        dependsOn(node.path + ":runClient")
+    }
+    name
 }
 
 def launchedFromRoot = gradle.startParameter.currentDir.canonicalFile == rootDir.canonicalFile
 def multiNodeRuns = gradle.startParameter.taskNames.findAll { it in ["runClient", "runServer"] }
 if (launchedFromRoot && multiNodeRuns) {
     throw new GradleException("在根项目运行 ${multiNodeRuns.join(", ")} 会把所有节点（Fabric 和 NeoForge）依次全部启动。" +
-            "请改用 :<节点>:${multiNodeRuns[0]}（例如 :26.3-fabric:${multiNodeRuns[0]}），" +
-            "或者 IDEA 里的 26.3-fabric / 26.3-neoforge 运行配置。")
+            "启动客户端请用 Moonlight → Tasks → application 里的 ${clientTasks.join(" / ")}，" +
+            "或者子项目下的 :<节点>:${multiNodeRuns[0]}（例如 :26.3-fabric:${multiNodeRuns[0]}）。")
 }
 
-idea.project.settings.runConfigurations.create("Build All Jars", org.jetbrains.gradle.ext.Gradle) { config ->
+def ideaRuns = idea.project.settings.runConfigurations
+
+subprojects.each { node ->
+    ["client", "server"].each { side ->
+        ideaRuns.create(node.name + "-" + side, org.jetbrains.gradle.ext.Gradle) { config ->
+            config.taskNames = [node.path + ":run" + side.capitalize()]
+            config.projectPath = rootDir.absolutePath
+        }
+    }
+}
+
+ideaRuns.create("buildAllJars", org.jetbrains.gradle.ext.Gradle) { config ->
     config.taskNames = ["buildAllJars"]
     config.projectPath = rootDir.absolutePath
 }
