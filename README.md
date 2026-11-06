@@ -37,9 +37,9 @@ QQ群: None
 ---
 ## 📦 Code Contributions 代码贡献
 
-| 项目名称                 | 开源链接                                                                      | 许可证       |
-|----------------------|---------------------------------------------------------------------------|-----------|
-| Stonecutter MultiLoader            | [StonecutterTeam](https://github.com/stonecutter-versioning/)                        | GPL-3.0   |
+| 项目名称                 | 开源链接                                                                      |
+|----------------------|---------------------------------------------------------------------------|
+| Stonecutter MultiLoader            | [StonecutterTeam](https://github.com/stonecutter-versioning/)                        |
 
 > **📘 许可证说明**
 > =

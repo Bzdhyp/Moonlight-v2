@@ -38,9 +38,9 @@ For those who are unfamiliar with the license, here is a summary of its main poi
 ---
 ## 📦 Code Contributions 代码贡献
 
-| Project Name                               | Source Link                                                               | License   |
-|--------------------------------------------|---------------------------------------------------------------------------|-----------|
-| Stonecutter MultiLoader            | [StonecutterTeam](https://github.com/stonecutter-versioning/)                       | GPL-3.0   |
+| Project Name                               | Source Link                                                               |
+|--------------------------------------------|---------------------------------------------------------------------------|
+| Stonecutter MultiLoader            | [StonecutterTeam](https://github.com/stonecutter-versioning/)                       |
 
 > **📘 License Notes**
 > =
