@@ -1,0 +1,73 @@
+plugins {
+    id "net.neoforged.moddev" version "2.0.148"
+}
+
+def javaVersion = 25
+def modId = property("mod.id").toString()
+def modVersion = property("mod.version").toString()
+def neoVersion = property("deps.neo_loader").toString()
+
+version = "${modVersion}+${sc.current.version}".toString()
+base.archivesName = modId + "-neoforge"
+
+neoForge {
+    version = neoVersion
+
+    mods {
+        register(modId) {
+            sourceSet(sourceSets.main)
+        }
+    }
+
+    runs {
+        register("client") {
+            gameDirectory = rootProject.file("run")
+            client()
+        }
+
+        register("server") {
+            gameDirectory = rootProject.file("run")
+            server()
+        }
+    }
+}
+
+java {
+    withSourcesJar()
+    toolchain.languageVersion = JavaLanguageVersion.of(javaVersion)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}
+
+def resourceProps = [
+        id       : modId,
+        name     : property("mod.name").toString(),
+        version  : modVersion,
+        minecraft: property("mod.mc_compat").toString(),
+        neoforge : neoVersion,
+]
+def mixinJava = "JAVA_" + javaVersion
+
+processResources {
+    inputs.properties(resourceProps)
+
+    filesMatching("META-INF/neoforge.mods.toml") { expand(resourceProps) }
+    filesMatching("*.mixins.json") { expand(java: mixinJava) }
+
+    exclude("fabric.mod.json", "*.ct", "*.classtweaker")
+}
+
+tasks.named("createMinecraftArtifacts") {
+    dependsOn("stonecutterGenerate")
+}
+
+tasks.register("buildAndCollect", Copy) {
+    group = "build"
+    description = "Builds mod jars and copies results to `build/libs/{mod version}/`"
+
+    inputs.property("version", modVersion)
+    from(tasks.named("jar").flatMap { it.archiveFile }, tasks.named("sourcesJar").flatMap { it.archiveFile })
+    into(rootProject.layout.buildDirectory.dir("libs/" + modVersion))
+}

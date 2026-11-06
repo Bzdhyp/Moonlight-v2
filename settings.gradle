@@ -1,0 +1,33 @@
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+        maven {
+            name = "FabricMC"
+            url = "https://maven.fabricmc.net/"
+        }
+        maven {
+            name = "NeoForged"
+            url = "https://maven.neoforged.net/releases/"
+        }
+        maven {
+            name = "KikuGie Releases"
+            url = "https://maven.kikugie.dev/releases"
+        }
+    }
+}
+
+plugins {
+    id "dev.kikugie.stonecutter" version "0.9.8"
+    id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
+}
+
+stonecutter {
+    create(rootProject) {
+        version("26.3-fabric", "26.3").buildscript("build.fabric.gradle")
+        version("26.3-neoforge", "26.3").buildscript("build.neoforge.gradle")
+        vcsVersion = "26.3-fabric"
+    }
+}
+
+rootProject.name = "Moonlight"

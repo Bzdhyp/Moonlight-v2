@@ -1,0 +1,15 @@
+mod.id = "moonlight"
+mod.name = "Moonlight"
+mod.version = "0.1.0"
+
+deps.fabric_loader = "0.20.1"
+
+
+[fabric."26.3"]
+mod.mc_compat = "~26.3"
+deps.fabric_api = "0.165.2+26.3"
+
+
+[neoforge."26.3"]
+mod.mc_compat = "[26.3, 26.4)"
+deps.neo_loader = "26.3.0.101"

@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "wtf.moonlight.mixin",
+  "compatibilityLevel": "${java}",
+  "mixins": [
+    "MinecraftServerMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
