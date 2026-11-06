@@ -10,6 +10,22 @@ def neoVersion = property("deps.neo_loader").toString()
 version = "${modVersion}+${sc.current.version}".toString()
 base.archivesName = modId + "-neoforge"
 
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "DevAuth"
+                url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1"
+            }
+        }
+        filter { includeGroup("me.djtheredstoner") }
+    }
+}
+
+dependencies {
+    runtimeOnly "me.djtheredstoner:DevAuth-neoforge:${property("deps.devauth")}"
+}
+
 neoForge {
     version = neoVersion
 
@@ -23,6 +39,7 @@ neoForge {
         register("client") {
             gameDirectory = rootProject.file("run")
             client()
+            systemProperty("devauth.enabled", "true")
         }
 
         register("server") {

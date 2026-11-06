@@ -19,6 +19,7 @@ Moonlight 是一个 Minecraft 26.3 模组，同一份源码同时构建 **Fabric
 | Fabric Loom | 1.19.3 | `build.fabric.gradle` |
 | NeoForge | 26.3.0.101 | `stonecutter.properties.toml` |
 | ModDevGradle | 2.0.148 | `build.neoforge.gradle` |
+| DevAuth（仅开发环境） | 1.2.2 | `stonecutter.properties.toml` |
 
 26.3 是非混淆版本：Fabric 和 NeoForge 看到的都是 Mojang 原名的 Minecraft 类，不需要映射表，也不需要 refmap。
 
@@ -35,6 +36,7 @@ Moonlight-v2-NextGen/
 ├─ build.neoforge.gradle         NeoForge 节点的构建脚本（ModDevGradle）
 ├─ gradle.properties             Gradle 自身选项
 ├─ gradle/                       wrapper 和守护进程 JVM 要求
+├─ .run/                         IDEA 启动配置（Fabric 客户端 / 服务端、Build All Jars）
 ├─ src/main/java/wtf/moonlight/
 │  ├─ Moonlight.java             通用入口：MOD_ID、LOGGER、init()、id()
 │  ├─ MoonlightClient.java       客户端入口：init()
@@ -283,7 +285,21 @@ Moonlight                  ← 根项目（控制器）
 
 `buildAllJars` 定义在 `stonecutter.gradle`，依赖所有节点的 `buildAndCollect`。以后新增 Minecraft 版本节点时会自动包含进去，不用改这个任务。
 
-### 8.2 命令行
+### 8.2 IDEA 的启动配置
+
+Gradle 同步之后，IDEA 右上角的运行配置下拉框里会有：
+
+| 配置 | 来源 | 作用 |
+|---|---|---|
+| `26.3-fabric - Client` / `26.3-fabric - Server` | 仓库里的 `.run/` 目录 | 运行 `:26.3-fabric:runClient` / `runServer` |
+| `26.3-neoforge - Client` / `26.3-neoforge - Server` | ModDevGradle 在同步时生成 | 直接启动 NeoForge 开发环境 |
+| `Build All Jars` | 仓库里的 `.run/` 目录 | 运行 `buildAllJars` |
+
+- Fabric 的配置不让 Loom 生成（`ideConfigGenerated(false)`），因为 Loom 只在第一次同步时写一次 `.idea/runConfigurations`，IDEA 经常识别不到。现在放在 `.run/` 里提交进 git，打开项目就能看到，clone 下来也一样。
+- Fabric 的配置是 Gradle 类型，会走 Loom 的 `runClient` 任务，所以 `build.fabric.gradle` 里给运行配置加的 JVM 参数都会生效。调试时直接点 Debug 即可。
+- 以后新增版本节点时，复制一份 `.run/26.3-fabric - Client.run.xml`，改掉 `name` 和任务路径即可。
+
+### 8.3 命令行
 
 | 目的 | 命令 |
 |---|---|
@@ -309,7 +325,17 @@ Moonlight                  ← 根项目（控制器）
 
 两个加载器共用 `run/` 作为游戏目录（存档、配置、日志都在里面）。
 
-### 8.3 gradle.properties 说明
+### 8.4 开发环境登录正版账号（DevAuth）
+
+两个加载器都以 `runtimeOnly` 引入了 [DevAuth](https://github.com/DJtheRedstoner/DevAuth)（版本在 `stonecutter.properties.toml` 的 `deps.devauth`）。它只在开发环境运行时生效，**不会打进发布的 jar**。
+
+- 只有**客户端**运行配置带了 `-Ddevauth.enabled=true`：Fabric 在 `build.fabric.gradle` 的 `runConfigs` 里，NeoForge 在 `build.neoforge.gradle` 的 `runs.client` 里。
+- 第一次启动客户端时，控制台会打出一个微软登录链接，在浏览器里登录授权后就会用这个账号进游戏。令牌保存在 `C:\Users\<用户名>\.devauth\microsoft_accounts.json`，之后会自动续期。**这个文件不要分享给别人。**
+- 多个账号：在 `~/.devauth/config.toml` 里加账号，用 `-Ddevauth.account=<名字>` 选择要登录哪个。
+- 想临时用离线账号：把对应的启用参数改成 `false`，或者删掉那一行。
+- DevAuth 的兼容表只写到 1.21.11。它的原理是在 `net.minecraft.client.main.Main.main` 开头改写启动参数，26.3 里这个方法没变，所以理论上能用。如果升级 Minecraft 后登录失效，先检查这一点。
+
+### 8.5 gradle.properties 说明
 
 - `org.gradle.parallel=false`：两个节点不并行构建。NeoForge 的 Minecraft 重编译很吃内存，并行时容易把电脑跑卡。
 - `org.gradle.configuration-cache=true`：开启配置缓存。修改构建脚本时注意第 10 节的写法要求。
@@ -335,7 +361,7 @@ Moonlight                  ← 根项目（控制器）
 
 | 要升级的 | 改哪里 |
 |---|---|
-| Fabric Loader / Fabric API / NeoForge | `stonecutter.properties.toml` |
+| Fabric Loader / Fabric API / NeoForge / DevAuth | `stonecutter.properties.toml` |
 | Loom | `build.fabric.gradle` 的 `plugins` |
 | ModDevGradle | `build.neoforge.gradle` 的 `plugins` |
 | Stonecutter | `settings.gradle` 的 `plugins` |
