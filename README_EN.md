@@ -18,7 +18,7 @@ Found a bug or have an idea for a new feature? You can let us know by clicking [
 This project is built upon various inspirations and contributions from the community. Special thanks to:
 
 - **Structure Inspiration:**
-  - [MCP](https://github.com/Bzdhyp/MCP-1.8.9)
+  - [Multi Loader](https://github.com/stonecutter-versioning/stonecutter-template-multiloader)
 
 ## 📜 License
 This project is subject to the [GNU General Public License v3.0](LICENSE). This does only apply for source code located directly in this clean repository. During the development and compilation process, additional source code may be used to which we have obtained no rights. Such code is not covered by the GPL license.
