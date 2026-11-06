@@ -45,6 +45,7 @@ loom {
 
     runConfigs.matching { it.name == "client" }.configureEach {
         vmArg("-Ddevauth.enabled=true")
+        vmArg("-Ddevauth.account=main")
     }
 }
 

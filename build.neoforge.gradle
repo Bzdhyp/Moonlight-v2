@@ -42,6 +42,7 @@ neoForge {
             client()
             ideName = nodeName
             systemProperty("devauth.enabled", "true")
+            systemProperty("devauth.account", "main")
         }
 
         register("server") {
