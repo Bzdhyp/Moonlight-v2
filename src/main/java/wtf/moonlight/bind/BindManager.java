@@ -49,20 +49,12 @@ public final class BindManager {
     @Subscribe
     private void onTick(TickEvent event) {
         if (!event.getPhase().isPre()) return;
-        for (Bindable bindable : bindables) {
-            if (bindable instanceof Bind bind && bind.isHold() && bind.isActive()) {
-                bind.reconcileHold(KeyUtils.isDown(bind.getKey()));
-            }
-        }
+        for (Bindable bindable : bindables) bindable.reconcile();
     }
 
     private void dispatch(int code, boolean pressed) {
         if (code == KeyUtils.NONE) return;
-        for (Bindable bindable : bindables) {
-            if (bindable.getKey() != code) continue;
-            if (!pressed && !bindable.triggersOnRelease()) continue;
-            bindable.onBind(pressed);
-        }
+        for (Bindable bindable : bindables) bindable.onKey(code, pressed);
     }
 
     private static String key(String name) {

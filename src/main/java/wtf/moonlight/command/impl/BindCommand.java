@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 import wtf.moonlight.bind.Bind;
 import wtf.moonlight.bind.BindCapture;
 import wtf.moonlight.bind.BindManager;
+import wtf.moonlight.bind.Hotkey;
 import wtf.moonlight.command.Command;
 import wtf.moonlight.utils.ChatUtils;
 import wtf.moonlight.utils.KeyUtils;
@@ -55,11 +56,9 @@ public final class BindCommand extends Command {
         }
         ChatUtils.info("Binds ({}):", binds.getBinds().size());
         for (Bind bind : binds.getBinds()) {
-            boolean bound = bind.getKey() != KeyUtils.NONE;
             ChatUtils.send(Component.literal("  " + bind.getName()).withStyle(ChatFormatting.WHITE)
                     .append(Component.literal(": ").withStyle(ChatFormatting.DARK_GRAY))
-                    .append(Component.literal(KeyUtils.getName(bind.getKey())).withStyle(bound ? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY))
-                    .append(Component.literal(bind.isHold() ? " (hold)" : "").withStyle(ChatFormatting.GRAY)));
+                    .append(Component.literal(keys(bind)).withStyle(bind.isBound() ? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY)));
         }
         return SUCCESS;
     }
@@ -67,7 +66,14 @@ public final class BindCommand extends Command {
     private int capture(String name) {
         Bind bind = find(name);
         if (bind == null) return 0;
-        capture.begin(bind, BindCommand::report, () -> ChatUtils.info("Stopped binding {}.", bind.getName()));
+        Hotkey hotkey = bind.primary();
+        capture.begin(hotkey, () -> {
+            if (hotkey.getKey() == KeyUtils.NONE) bind.remove(hotkey);
+            report(bind);
+        }, () -> {
+            if (hotkey.getKey() == KeyUtils.NONE) bind.remove(hotkey);
+            ChatUtils.info("Stopped binding {}.", bind.getName());
+        });
         ChatUtils.info("Press a key to bind {}. {} clears the bind, {} cancels.", bind.getName(), "Esc", "Left click");
         return SUCCESS;
     }
@@ -91,8 +97,13 @@ public final class BindCommand extends Command {
                 }
             }
         }
-        bind.setKey(code);
-        if (hold != null) bind.setHold(hold);
+        if (code == KeyUtils.NONE) {
+            bind.clear();
+        } else {
+            Hotkey hotkey = bind.primary();
+            hotkey.setKey(code);
+            if (hold != null) hotkey.setHold(hold);
+        }
         report(bind);
         return SUCCESS;
     }
@@ -112,11 +123,18 @@ public final class BindCommand extends Command {
     }
 
     private static void report(Bind bind) {
-        if (bind.getKey() == KeyUtils.NONE) {
+        if (!bind.isBound()) {
             ChatUtils.info("{} is no longer bound.", bind.getName());
             return;
         }
-        ChatUtils.info("{} bound to {}{}", bind.getName(), KeyUtils.getName(bind.getKey()),
-                Component.literal(bind.isHold() ? " (hold)." : ".").withStyle(ChatFormatting.GRAY));
+        ChatUtils.info("{} bound to {}.", bind.getName(), keys(bind));
+    }
+
+    private static String keys(Bind bind) {
+        List<String> keys = new ArrayList<>();
+        for (Hotkey hotkey : bind.getHotkeys()) {
+            if (hotkey.getKey() != KeyUtils.NONE) keys.add(KeyUtils.getName(hotkey.getKey()) + (hotkey.isHold() ? " (hold)" : ""));
+        }
+        return keys.isEmpty() ? KeyUtils.getName(KeyUtils.NONE) : String.join(", ", keys);
     }
 }

@@ -65,6 +65,25 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(javaVersion)
 }
 
+sourceSets {
+    preview {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+tasks.register("previewUi", JavaExec) {
+    group = "application"
+    description = "Opens the ClickGUI and HUD in a standalone ImGui window without starting Minecraft"
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = "wtf.moonlight.ui.imgui.Preview"
+    workingDir = rootProject.file("run")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    systemProperty("java.awt.headless", "true")
+    systemProperty("org.apache.logging.log4j.level", "INFO")
+    systemProperty("moonlight.assets", new File(gradle.gradleUserHomeDir, "caches/fabric-loom/assets").absolutePath)
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
 }

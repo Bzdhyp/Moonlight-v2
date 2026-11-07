@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import wtf.moonlight.Moonlight;
 import wtf.moonlight.event.impl.input.MouseInputEvent;
+import wtf.moonlight.event.impl.input.MouseMoveEvent;
 import wtf.moonlight.event.impl.input.MouseScrollEvent;
 
 @Mixin(MouseHandler.class)
@@ -18,6 +19,11 @@ public abstract class MouseHandlerMixin {
         if (Moonlight.EVENT_BUS.post(new MouseInputEvent(info.button(), action)).isCancelled()) {
             ci.cancel();
         }
+    }
+
+    @Inject(method = "onMove", at = @At("TAIL"))
+    private void moonlight$onMove(CallbackInfo ci) {
+        if (Moonlight.EVENT_BUS.hasListeners(MouseMoveEvent.class)) Moonlight.EVENT_BUS.post(MouseMoveEvent.INSTANCE);
     }
 
     @Inject(method = "onScroll", at = @At("HEAD"), cancellable = true)

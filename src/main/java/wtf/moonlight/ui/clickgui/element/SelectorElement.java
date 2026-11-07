@@ -47,7 +47,7 @@ public final class SelectorElement extends Element {
             for (int i = 0; i < modes.size(); i++) {
                 ImGui.pushID(i);
                 if (Widgets.choice(theme, "option", modes.get(i), value.get() == i, ImGui.getContentRegionAvailX())) {
-                    value.set(i);
+                    value.select(i);
                     ImGui.closeCurrentPopup();
                 }
                 ImGui.popID();

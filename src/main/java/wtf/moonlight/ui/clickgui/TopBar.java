@@ -1,7 +1,6 @@
 package wtf.moonlight.ui.clickgui;
 
 import imgui.ImDrawList;
-import imgui.ImFont;
 import imgui.ImGui;
 import imgui.ImVec2;
 import imgui.flag.ImDrawFlags;
@@ -13,7 +12,6 @@ import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImString;
 import wtf.moonlight.config.ConfigManager;
 import wtf.moonlight.ui.imgui.Fonts;
-import wtf.moonlight.ui.imgui.Natives;
 
 import java.util.List;
 
@@ -31,6 +29,10 @@ final class TopBar {
     private static final float SEARCH_BUTTON = 28;
     private static final float SEARCH_FIELD = 150;
     private static final float SEARCH_GAP = 6;
+    private static final float SEARCH_HEIGHT = 29;
+    private static final float SEARCH_HOVER = .65f;
+    private static final float SEARCH_RESPONSE = 18;
+    private static final float SEARCH_ICON_TONE = .75f;
     private static final float POPUP_WIDTH = 268;
     private static final float POPUP_ROW = 32;
     private static final float POPUP_ROUNDING = 10;
@@ -76,7 +78,7 @@ final class TopBar {
         Theme theme = panel.colors();
         ImDrawList draw = ImGui.getWindowDrawList();
         draw.addRectFilled(barX + scale(158), barY, barX + scale(748), barY + scale(56),
-                theme.isDark() ? Colors.rgba(11, 13, 20, 225) : Colors.rgba(240, 243, 249, 225), scale(14), ImDrawFlags.RoundCornersTopRight);
+                theme.fade(theme.isDark() ? Colors.rgba(11, 13, 20, 225) : Colors.rgba(220, 222, 223, 225)), scale(14), ImDrawFlags.RoundCornersTopRight);
         draw.addLine(barX + scale(158), barY + scale(56), barX + scale(748), barY + scale(56), theme.split, scale(1));
         renderTitle(theme);
         renderSelector(theme);
@@ -97,7 +99,7 @@ final class TopBar {
         float width = wordmarkWidth(name);
         draw.pushClipRect(barX + scale(8), barY, barX + scale(150), barY + scale(56), true);
         drawTitle(draw, name, barX + (scale(158) - width) / 2.0F, barCenterY - Widgets.textHeight() / 2.0F,
-                ((float) ImGui.getTime() / WORDMARK_CYCLE) % 1.0F, scale(WORDMARK_SHIFT));
+                ((float) ImGui.getTime() / WORDMARK_CYCLE) % 1.0F, scale(WORDMARK_SHIFT), theme.isDark() ? LOGO_MAIN : theme.clientName);
         draw.popClipRect();
         Widgets.popFont();
         draw.addLine(barX + scale(10), barY + scale(56), barX + scale(147), barY + scale(56), theme.split, scale(1));
@@ -126,7 +128,7 @@ final class TopBar {
         boolean openClicked = ImGui.isItemClicked();
 
         ImDrawList draw = ImGui.getWindowDrawList();
-        draw.addRectFilled(minX, minY, maxX, maxY, Colors.reAlpha(theme.modulePanelBg, 255), scale(SELECTOR_ROUNDING));
+        draw.addRectFilled(minX, minY, maxX, maxY, theme.fade(Colors.reAlpha(theme.modulePanelBg, 255)), scale(SELECTOR_ROUNDING));
         if (saveHovered) draw.addRectFilled(minX, minY, splitX, maxY, theme.buttonHoveredBg, scale(SELECTOR_ROUNDING), ImDrawFlags.RoundCornersLeft);
         if (openHovered) draw.addRectFilled(splitX, minY, maxX, maxY, theme.buttonHoveredBg, scale(SELECTOR_ROUNDING), ImDrawFlags.RoundCornersRight);
         Widgets.pushIcon();
@@ -396,7 +398,7 @@ final class TopBar {
         float reveal = Controls.popupEase(searchReveal);
         searchHighlight = searchHighlight + (1.0F - (float) Math.exp(-16.0F * delta)) * ((open || hovered ? 1 : 0) - searchHighlight);
         magnifier(ImGui.getWindowDrawList(), buttonX + scale(SEARCH_BUTTON) / 2.0F, buttonY + scale(SEARCH_BUTTON) / 2.0F, scale(14),
-                Colors.mix(theme.secondary, theme.iconHighlight, searchHighlight * .35f));
+                Colors.mix(Colors.mix(theme.secondary, theme.main, SEARCH_ICON_TONE), theme.textHighlight, searchHighlight));
 
         float width = scale(SEARCH_FIELD) * reveal;
         if (width < scale(1)) {
@@ -404,21 +406,17 @@ final class TopBar {
             return;
         }
         Widgets.pushText(Widgets.TEXT_CONTROL);
-        float height = scale(SELECTOR_HEIGHT);
+        float height = scale(SEARCH_HEIGHT);
         float right = buttonX - scale(SEARCH_GAP);
         float minX = right - width;
         float minY = barCenterY - height / 2.0F;
         float maxY = minY + height;
         float rounding = Math.min(scale(SELECTOR_ROUNDING), width * 0.5f);
         ImDrawList draw = ImGui.getWindowDrawList();
-        draw.addRectFilled(minX, minY, right, maxY, Colors.reAlpha(theme.modulePanelBg, 255), rounding);
-        draw.addRectFilled(minX, minY, right, maxY,
-                Colors.reAlpha(theme.buttonHoveredBg, (int) (Colors.alpha(theme.buttonHoveredBg) * searchFocus)), rounding);
+        draw.addRectFilled(minX, minY, right, maxY, Colors.mix(theme.fade(Colors.reAlpha(theme.modulePanelBg, 255)), theme.buttonHoveredBg, searchFocus), rounding);
         ImGui.pushClipRect(minX, minY, right, maxY, true);
-        float[] ink = ink(searchBuffer.get().isEmpty() ? SEARCH_HINT : searchBuffer.get());
         float paddingY = Math.max(0, (height - Widgets.textHeight()) * .5f);
-        float inkOffset = ink[1] > ink[0] ? (height - ink[0] - ink[1]) * .5f - paddingY : 0;
-        ImGui.setCursorScreenPos(right - scale(SEARCH_FIELD), (float) Math.floor(minY + inkOffset + 0.5f));
+        ImGui.setCursorScreenPos(right - scale(SEARCH_FIELD), minY);
         ImGui.setNextItemWidth(scale(SEARCH_FIELD));
         ImGui.pushStyleVar(ImGuiStyleVar.FrameRounding, scale(SELECTOR_ROUNDING));
         ImGui.pushStyleVar(ImGuiStyleVar.FramePadding, scale(8), paddingY);
@@ -434,33 +432,15 @@ final class TopBar {
         ImGui.beginDisabled(!open);
         if (focusSearch) ImGui.setKeyboardFocusHere();
         if (ImGui.inputTextWithHint("##search", SEARCH_HINT, searchBuffer) && open) panel.setSearch(searchBuffer.get());
-        float focus = open && (ImGui.isItemActive() || ImGui.isItemHovered()) ? 1 : 0;
+        float focus = !open ? 0 : ImGui.isItemActive() ? 1 : ImGui.isItemHovered() ? SEARCH_HOVER : 0;
         if (ImGui.isItemActive()) focusSearch = false;
-        searchFocus += (focus - searchFocus) * blend;
+        searchFocus += (focus - searchFocus) * (1.0F - (float) Math.exp(-SEARCH_RESPONSE * delta));
         ImGui.endDisabled();
         ImGui.popStyleColor(7);
         ImGui.popStyleVar(4);
         ImGui.popClipRect();
-        draw.addRect(minX, minY, right, maxY, theme.split, rounding, 0, scale(1));
+        draw.addRect(minX, minY, right, maxY, Colors.mix(theme.split, theme.iconHighlight, searchFocus), rounding, 0, scale(1));
         Widgets.popFont();
-    }
-
-    private static float[] ink(String text) {
-        float top = Widgets.textHeight();
-        float bottom = 0;
-        ImDrawList measure = ImGui.getForegroundDrawList();
-        long list = measure.ptr;
-        int first = Natives.vertexCount(list);
-        measure.pushClipRect(-16384, -4096, -8192, 4096, false);
-        ImFont font = ImGui.getFont();
-        font.renderText(measure, ImGui.getFontSize(), -12288, 0, 0xFFFFFFFF, -16384, -4096, -8192, 4096, text, null, 0, 0);
-        measure.popClipRect();
-        if (Natives.vertexCount(list) > first) {
-            float[] range = Natives.inkRange(list, first);
-            top = Math.min(top, range[0]);
-            bottom = Math.max(bottom, range[1]);
-        }
-        return new float[]{top, bottom};
     }
 
     private static float wordmarkWidth(String text) {
@@ -484,7 +464,7 @@ final class TopBar {
         }
     }
 
-    private static void drawTitle(ImDrawList draw, String text, float x, float y, float animation, float offset) {
+    private static void drawTitle(ImDrawList draw, String text, float x, float y, float animation, float offset, int main) {
         if (animation > 0) {
             ImVec2[] first = {new ImVec2(0, 0), new ImVec2(-offset, -offset), new ImVec2(offset, -offset), new ImVec2(-offset, offset), new ImVec2(offset, offset)};
             ImVec2[] second = {new ImVec2(0, 0), new ImVec2(offset, offset), new ImVec2(-offset, offset), new ImVec2(offset, -offset), new ImVec2(-offset, -offset)};
@@ -497,7 +477,7 @@ final class TopBar {
             drawWordmark(draw, text, x + second[segment].x + (second[segment + 1].x - second[segment].x) * t,
                     y + second[segment].y + (second[segment + 1].y - second[segment].y) * t, LOGO_SECOND);
         }
-        drawWordmark(draw, text, x, y, LOGO_MAIN);
+        drawWordmark(draw, text, x, y, main);
     }
 
     private static boolean actionItem(String label, Icon icon, int textColor, int iconColor, int hover) {

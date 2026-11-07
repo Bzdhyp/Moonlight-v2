@@ -8,14 +8,12 @@ import wtf.moonlight.event.impl.input.KeyInputEvent;
 import wtf.moonlight.event.impl.input.MouseInputEvent;
 import wtf.moonlight.utils.KeyUtils;
 
-import java.util.function.Consumer;
-
 public final class BindCapture {
-    private @Nullable Bind target;
-    private @Nullable Consumer<Bind> onFinish;
+    private @Nullable Hotkey target;
+    private @Nullable Runnable onFinish;
     private @Nullable Runnable onCancel;
 
-    public void begin(Bind target, Consumer<Bind> onFinish, Runnable onCancel) {
+    public void begin(Hotkey target, Runnable onFinish, Runnable onCancel) {
         cancel();
         this.target = target;
         this.onFinish = onFinish;
@@ -28,7 +26,7 @@ public final class BindCapture {
         if (callback != null) callback.run();
     }
 
-    public @Nullable Bind getTarget() {
+    public @Nullable Hotkey getTarget() {
         return target;
     }
 
@@ -51,12 +49,12 @@ public final class BindCapture {
     }
 
     private void finish(int code) {
-        Bind bind = target;
-        Consumer<Bind> callback = onFinish;
+        Hotkey hotkey = target;
+        Runnable callback = onFinish;
         clear();
-        if (bind == null) return;
-        bind.setKey(code);
-        if (callback != null) callback.accept(bind);
+        if (hotkey == null) return;
+        hotkey.setKey(code);
+        if (callback != null) callback.run();
     }
 
     private void clear() {

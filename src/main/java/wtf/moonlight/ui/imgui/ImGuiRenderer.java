@@ -248,6 +248,7 @@ final class ImGuiRenderer {
         private final GpuBufferSlice transforms;
         private final int firstIndex;
         private final GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+        private final GpuSampler nearest = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
         private @Nullable RenderPass pass;
         private boolean drawn;
         private boolean dirty = true;
@@ -288,8 +289,11 @@ final class ImGuiRenderer {
                             blur(n, c, command, globalVertex, globalIndex);
                         } else {
                             Texture texture = textures.get(id);
-                            if (texture == null) continue;
-                            draw(pass(), command, globalVertex, globalIndex, texture.view());
+                            Identifier path = texture == null ? Textures.path(id) : null;
+                            if (texture != null) draw(pass(), command, globalVertex, globalIndex, texture.view(), sampler);
+                            else if (path != null) draw(pass(), command, globalVertex, globalIndex,
+                                    Minecraft.getInstance().getTextureManager().getTexture(path).getTextureView(), nearest);
+                            else continue;
                             drawn = true;
                             dirty = true;
                         }
@@ -322,11 +326,11 @@ final class ImGuiRenderer {
             close();
             try {
                 GpuTextureView fill = white(encoder);
-                bloom.render(encoder, target, area, settings.bloomAmount(), settings.bloomOffset(), opacity, color | 0xFF000000, mask -> {
+                bloom.render(encoder, target, area, settings.bloomAmount(), settings.bloomOffset(), opacity, Natives.withAlpha(color, settings.shadowAlpha()), mask -> {
                     setup(mask, MASK);
                     for (int i = 0; i < length; i++) {
                         long at = command + (long) i * Natives.COMMAND_SIZE;
-                        if (!skipped(at)) draw(mask, at, globalVertex, globalIndex, fill);
+                        if (!skipped(at)) draw(mask, at, globalVertex, globalIndex, fill, sampler);
                     }
                 });
                 dirty = true;
@@ -356,7 +360,7 @@ final class ImGuiRenderer {
             if (!blurred) return;
             RenderPass current = pass();
             setup(current, BLUR);
-            draw(current, command, globalVertex, globalIndex, blur.view());
+            draw(current, command, globalVertex, globalIndex, blur.view(), sampler);
             setup(current, PIPELINE);
         }
 
@@ -405,7 +409,7 @@ final class ImGuiRenderer {
             return new Shape(new Area(minX, minY, maxX, maxY).intersect(clip), alpha / 255.0F, color);
         }
 
-        private void draw(RenderPass into, long command, int globalVertex, int globalIndex, GpuTextureView view) {
+        private void draw(RenderPass into, long command, int globalVertex, int globalIndex, GpuTextureView view, GpuSampler filter) {
             int width = target.width;
             int height = target.height;
             float minX = Math.max(0, MemoryUtil.memGetFloat(command));
@@ -416,7 +420,7 @@ final class ImGuiRenderer {
             int scissorHeight = (int) (maxY - minY);
             if (scissorWidth <= 0 || scissorHeight <= 0) return;
             into.enableScissor((int) minX, (int) (height - maxY), scissorWidth, scissorHeight);
-            into.setUniform("Sampler0", view, sampler);
+            into.setUniform("Sampler0", view, filter);
             into.drawIndexed(MemoryUtil.memGetInt(command + Natives.COMMAND_ELEMENTS), 1,
                     firstIndex + globalIndex + MemoryUtil.memGetInt(command + Natives.COMMAND_INDEX_OFFSET),
                     globalVertex + MemoryUtil.memGetInt(command + Natives.COMMAND_VERTEX_OFFSET), 0);

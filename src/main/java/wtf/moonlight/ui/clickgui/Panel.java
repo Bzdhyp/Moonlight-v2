@@ -10,7 +10,10 @@ import imgui.flag.ImGuiMouseButton;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiWindowFlags;
 import wtf.moonlight.bind.BindCapture;
+import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.Nullable;
 import wtf.moonlight.config.ConfigManager;
+import wtf.moonlight.module.Module;
 import wtf.moonlight.module.ModuleManager;
 import wtf.moonlight.ui.imgui.Effects;
 import wtf.moonlight.ui.imgui.Fonts;
@@ -31,6 +34,7 @@ public final class Panel {
     private final ClientSettings settings;
     private final BindCapture capture;
     private final Supplier<String> user;
+    private final Supplier<Identifier> skin;
     private final Popups popups = new Popups();
     private final Placement placement = new Placement();
     private final TopBar topBar = new TopBar(this);
@@ -43,26 +47,51 @@ public final class Panel {
     private boolean searching;
     private String search = "";
     private boolean closePopups;
+    private @Nullable Row hud;
+    private float hudMinX;
+    private float hudMinY;
+    private float hudMaxX;
+    private float hudMaxY;
+    private boolean hudOpening;
 
-    public Panel(ModuleManager modules, ConfigManager configs, ClientSettings settings, BindCapture capture, Supplier<String> user) {
+    public Panel(ModuleManager modules, ConfigManager configs, ClientSettings settings, BindCapture capture, Supplier<String> user,
+                 Supplier<Identifier> skin) {
         this.modules = modules;
         this.configs = configs;
         this.settings = settings;
         this.capture = capture;
         this.user = user;
+        this.skin = skin;
     }
 
     public Theme colors() {
         return settings.colors();
     }
 
-    public void frame(boolean open) {
+    public void frame(boolean open, boolean editing) {
         if (closePopups) {
             closePopups = false;
             ImGui.openPopup("##closed");
             imgui.internal.ImGui.clearActiveID();
         }
-        if (open) render();
+        if (!editing && hud != null) {
+            hud = null;
+            closePopups = true;
+        }
+        if (open || hud != null) render(open);
+        else popups.drawClosing();
+    }
+
+    public void settings(Module module) {
+        hud = Row.of(this, module);
+        hudOpening = true;
+    }
+
+    public void follow(float minX, float minY, float maxX, float maxY) {
+        hudMinX = minX;
+        hudMinY = minY;
+        hudMaxX = maxX;
+        hudMaxY = maxY;
     }
 
     void close() {
@@ -88,6 +117,10 @@ public final class Panel {
 
     String user() {
         return user.get();
+    }
+
+    Identifier skin() {
+        return skin.get();
     }
 
     boolean isSearching() {
@@ -116,16 +149,25 @@ public final class Panel {
         return 1.0F - (float) Math.pow(1.0F - pageMix, 3.0F);
     }
 
-    private void render() {
+    private void render(boolean open) {
         Theme theme = colors();
         Controls.setTheme(theme);
-        if (lastFrame != ImGui.getFrameCount() - 1) {
-            revealStart = ImGui.getTime();
-            popups.reset();
+        Popups.setActive(popups);
+        if (open) scaled(panelScale(), () -> window(theme));
+        Row current = hud;
+        if (current != null) {
+            scaled(settings.hudMenuScale() * ImGuiManager.displayScale(), () -> {
+                if (!current.popup(theme, hudMinX, hudMinY, hudMaxX, hudMaxY, hudOpening)) hud = null;
+            });
         }
-        lastFrame = ImGui.getFrameCount();
-        float reveal = Math.clamp((float) ((ImGui.getTime() - revealStart) / .48), 0.0F, 1.0F);
+        hudOpening = false;
+        popups.drawClosing();
+        Popups.setActive(null);
+        Controls.setTheme(null);
+        Widgets.setScale(1);
+    }
 
+    private float panelScale() {
         if (appliedScale == 0 || !ImGui.isMouseDown(ImGuiMouseButton.Left)) appliedScale = settings.guiScale();
         ImGuiIO io = ImGui.getIO();
         float fit = Math.min(Math.max(1.0F, io.getDisplaySizeX() - 16.0F) / WIDTH, Math.max(1.0F, io.getDisplaySizeY() - 16.0F) / HEIGHT);
@@ -134,7 +176,10 @@ public final class Panel {
             popups.reset();
             renderedScale = scale;
         }
-        Popups.setActive(popups);
+        return scale;
+    }
+
+    private static void scaled(float scale, Runnable body) {
         Widgets.setScale(scale);
         Windows.reset();
         ImGuiManager.saveStyle();
@@ -142,7 +187,18 @@ public final class Panel {
         style.scaleAllSizes(scale);
         style.setFontScaleMain(style.getFontScaleMain() * scale);
         ImGui.pushFont(Fonts.regular(), 15);
+        body.run();
+        ImGuiManager.restoreStyle();
+        ImGui.popFont();
+    }
 
+    private void window(Theme theme) {
+        if (lastFrame != ImGui.getFrameCount() - 1) {
+            revealStart = ImGui.getTime();
+            popups.reset();
+        }
+        lastFrame = ImGui.getFrameCount();
+        float reveal = Math.clamp((float) ((ImGui.getTime() - revealStart) / .48), 0.0F, 1.0F);
         ImGui.setNextWindowSize(scale(WIDTH), scale(HEIGHT));
         placement.placeCentered(scale(WIDTH), scale(HEIGHT));
         ImGui.pushStyleVar(ImGuiStyleVar.WindowRounding, scale(ROUNDING));
@@ -172,8 +228,8 @@ public final class Panel {
             ImGui.beginDisabled(reveal < 1);
             ImDrawList draw = ImGui.getWindowDrawList();
             draw.pushClipRectFullScreen();
-            Effects.shadow(draw, x, y, maxX, maxY, scale(ROUNDING), 0, Controls.SHADOW);
             Effects.blur(draw, x, y, maxX, maxY, scale(ROUNDING), 0);
+            Effects.shadow(draw, x, y, maxX, maxY, scale(ROUNDING), 0, Controls.SHADOW);
             draw.popClipRect();
             draw.pushClipRect(x - 1, y - 1, maxX + 1, maxY + 1, false);
             Controls.glass(draw, x, y, maxX, maxY, theme.windowBg, scale(ROUNDING));
@@ -197,14 +253,7 @@ public final class Panel {
             }
         }
         Windows.end();
-
         ImGui.popStyleColor(6);
         ImGui.popStyleVar(7);
-        ImGuiManager.restoreStyle();
-        ImGui.popFont();
-        popups.drawClosing();
-        Popups.setActive(null);
-        Controls.setTheme(null);
-        Widgets.setScale(1);
     }
 }

@@ -23,9 +23,13 @@ public final class Effects {
     }
 
     public static void blur(ImDrawList draw, float minX, float minY, float maxX, float maxY, float rounding, int flags) {
+        blur(draw, minX, minY, maxX, maxY, rounding, flags, 1);
+    }
+
+    public static void blur(ImDrawList draw, float minX, float minY, float maxX, float maxY, float rounding, int flags, float alpha) {
         PostProcess settings = settings();
-        if (settings == null || !settings.blur()) return;
-        draw.addImageRounded(BLUR, minX, minY, maxX, maxY, 0, 0, 1, 1, 0xFFFFFFFF, rounding, flags);
+        if (settings == null || !settings.blur() || alpha <= 0) return;
+        draw.addImageRounded(BLUR, minX, minY, maxX, maxY, 0, 0, 1, 1, Natives.withAlpha(0xFFFFFFFF, Math.round(255 * alpha)), rounding, flags);
     }
 
     public static void shadow(ImDrawList draw, float minX, float minY, float maxX, float maxY, float rounding, int flags, int color) {

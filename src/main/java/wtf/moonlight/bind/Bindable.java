@@ -1,11 +1,7 @@
 package wtf.moonlight.bind;
 
 public interface Bindable {
-    int getKey();
+    void onKey(int code, boolean pressed);
 
-    void onBind(boolean pressed);
-
-    default boolean triggersOnRelease() {
-        return false;
-    }
+    void reconcile();
 }

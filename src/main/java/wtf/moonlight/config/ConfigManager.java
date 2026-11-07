@@ -303,7 +303,7 @@ public final class ConfigManager {
                         if (element != null) value.load(element);
                     }
                 }
-                if (module.isPersistent() && json.has("enabled")) module.setEnabled(json.get("enabled").getAsBoolean());
+                if (module.isPersistent() && json.has("enabled")) enable(module, json.get("enabled").getAsBoolean());
             }
         }
         if (root.get("client") instanceof JsonObject clientJson) {
@@ -311,6 +311,14 @@ public final class ConfigManager {
                 JsonElement json = clientJson.get(value.getName());
                 if (json != null) value.load(json);
             }
+        }
+    }
+
+    private static void enable(Module module, boolean enabled) {
+        try {
+            module.setEnabled(enabled);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Module {} failed to switch {}", module.getName(), enabled ? "on" : "off", exception);
         }
     }
 

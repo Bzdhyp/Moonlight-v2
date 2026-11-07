@@ -1,5 +1,6 @@
 package wtf.moonlight.module;
 
+import org.jspecify.annotations.Nullable;
 import wtf.moonlight.Moonlight;
 import wtf.moonlight.bind.Bind;
 import wtf.moonlight.value.Value;
@@ -11,13 +12,23 @@ import java.util.List;
 public abstract class Module {
     private final String name;
     private final Category category;
+    private final @Nullable Subcategory subcategory;
     private final Bind bind;
     private final List<Value<?>> values = new ArrayList<>();
     private boolean enabled;
 
     protected Module(String name, Category category) {
+        this(name, category, null);
+    }
+
+    protected Module(String name, Subcategory subcategory) {
+        this(name, subcategory.getCategory(), subcategory);
+    }
+
+    private Module(String name, Category category, @Nullable Subcategory subcategory) {
         this.name = name;
         this.category = category;
+        this.subcategory = subcategory;
         this.bind = new Bind(name, this::setEnabled);
     }
 
@@ -27,6 +38,10 @@ public abstract class Module {
 
     public Category getCategory() {
         return category;
+    }
+
+    public @Nullable Subcategory getSubcategory() {
+        return subcategory;
     }
 
     public Bind getBind() {

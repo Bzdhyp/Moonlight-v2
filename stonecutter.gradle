@@ -29,7 +29,15 @@ def clientTasks = subprojects.collect { node ->
     name
 }
 
-def launchedFromRoot = gradle.startParameter.currentDir.canonicalFile == rootDir.canonicalFile
+def previewNode = subprojects.find { it.name.endsWith("-fabric") }
+
+tasks.register("ui-preview") {
+    group = "application"
+    description = "Opens the ClickGUI and HUD preview window without starting Minecraft (" + previewNode.path + ":previewUi)"
+    dependsOn(previewNode.path + ":previewUi")
+}
+
+def launchedFromRoot =gradle.startParameter.currentDir.canonicalFile == rootDir.canonicalFile
 def multiNodeRuns = gradle.startParameter.taskNames.findAll { it in ["runClient", "runServer"] }
 if (launchedFromRoot && multiNodeRuns) {
     throw new GradleException("在根项目运行 ${multiNodeRuns.join(", ")} 会把所有节点（Fabric 和 NeoForge）依次全部启动。" +
@@ -46,6 +54,11 @@ subprojects.each { node ->
             config.projectPath = rootDir.absolutePath
         }
     }
+}
+
+ideaRuns.create("ui-preview", org.jetbrains.gradle.ext.Gradle) { config ->
+    config.taskNames = [previewNode.path + ":previewUi"]
+    config.projectPath = rootDir.absolutePath
 }
 
 ideaRuns.create("buildAllJars", org.jetbrains.gradle.ext.Gradle) { config ->

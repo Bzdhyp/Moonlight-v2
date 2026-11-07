@@ -7,7 +7,9 @@ import wtf.moonlight.module.impl.movement.Sprint;
 import wtf.moonlight.module.impl.player.Scaffold;
 import wtf.moonlight.module.impl.render.ClickGui;
 import wtf.moonlight.module.impl.render.FullBright;
+import wtf.moonlight.module.impl.render.Hotkeys;
 import wtf.moonlight.module.impl.render.PostProcess;
+import wtf.moonlight.module.impl.render.Watermark;
 
 import java.util.List;
 
@@ -22,6 +24,8 @@ public final class ModuleManager {
                 scaffold,
                 new FullBright(),
                 new PostProcess(),
+                new Watermark(),
+                new Hotkeys(),
                 new ClickGui()
         );
         for (Module module : modules) {

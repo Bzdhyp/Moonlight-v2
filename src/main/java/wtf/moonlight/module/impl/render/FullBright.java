@@ -4,8 +4,8 @@ import net.minecraft.client.Minecraft;
 import wtf.moonlight.event.Subscribe;
 import wtf.moonlight.event.impl.player.PlayerTickEvent;
 import wtf.moonlight.event.impl.render.GammaEvent;
-import wtf.moonlight.module.Category;
 import wtf.moonlight.module.Module;
+import wtf.moonlight.module.Subcategory;
 
 public final class FullBright extends Module {
     private static final double BRIGHTNESS = 15.0;
@@ -14,7 +14,7 @@ public final class FullBright extends Module {
     private double gamma;
 
     public FullBright() {
-        super("FullBright", Category.RENDER);
+        super("FullBright", Subcategory.WORLD);
     }
 
     @Override

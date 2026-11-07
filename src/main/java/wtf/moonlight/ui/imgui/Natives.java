@@ -75,16 +75,20 @@ public final class Natives {
         }
     }
 
-    public static float[] inkRange(long list, int firstVertex) {
-        float top = Float.MAX_VALUE;
-        float bottom = -Float.MAX_VALUE;
+    public static void gradient(long list, int firstVertex, float x0, float y0, float x1, float y1, int from, int to) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float length = Math.max(1.0E-6F, dx * dx + dy * dy);
         long vertex = vertices(list) + (long) firstVertex * VERTEX_SIZE;
         for (int i = vertexCount(list) - firstVertex; i > 0; i--, vertex += VERTEX_SIZE) {
-            float y = MemoryUtil.memGetFloat(vertex + 4);
-            top = Math.min(top, y);
-            bottom = Math.max(bottom, y);
+            float t = Math.clamp(((MemoryUtil.memGetFloat(vertex) - x0) * dx + (MemoryUtil.memGetFloat(vertex + 4) - y0) * dy) / length, 0.0F, 1.0F);
+            int fringe = MemoryUtil.memGetInt(vertex + 16) >>> 24;
+            int out = 0;
+            for (int shift = 0; shift < 32; shift += 8) {
+                out |= Math.round((from >>> shift & 0xFF) + ((to >>> shift & 0xFF) - (from >>> shift & 0xFF)) * t) << shift;
+            }
+            MemoryUtil.memPutInt(vertex + 16, withAlpha(out, (out >>> 24) * fringe / 255));
         }
-        return new float[]{top, bottom};
     }
 
     public static int withAlpha(int color, int alpha) {

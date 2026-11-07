@@ -64,14 +64,13 @@ public final class ImGuiManager {
     }
 
     private void init() {
-        float scale = SDLVideo.SDL_GetWindowDisplayScale(Minecraft.getInstance().getWindow().handle());
-        displayScale = scale > 0 ? scale : 1;
-        setup();
+        setup(SDLVideo.SDL_GetWindowDisplayScale(Minecraft.getInstance().getWindow().handle()));
         renderer = new ImGuiRenderer();
         ready = true;
     }
 
-    private static void setup() {
+    static void setup(float scale) {
+        displayScale = scale > 0 ? scale : 1;
         ImGui.createContext();
         ImGuiIO io = ImGui.getIO();
         io.setIniFilename(null);

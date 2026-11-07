@@ -30,7 +30,7 @@ import wtf.moonlight.module.impl.player.Scaffold;
 import wtf.moonlight.rotation.Rotation;
 import wtf.moonlight.utils.RaycastUtils;
 import wtf.moonlight.utils.RotationUtils;
-import wtf.moonlight.value.impl.BoolValue;
+import wtf.moonlight.value.impl.ListValue;
 import wtf.moonlight.value.impl.ModeValue;
 import wtf.moonlight.value.impl.NumberValue;
 
@@ -46,6 +46,11 @@ public final class KillAura extends Module {
     private static final int RANGE = 2;
     private static final double CPS_DEVIATION = 5;
     private static final double CHECK_RANGE = 3.0;
+    private static final String PLAYERS = "Players";
+    private static final String MOBS = "Mobs";
+    private static final String ANIMALS = "Animals";
+    private static final String VILLAGERS = "Villagers";
+    private static final String INVISIBLES = "Invisibles";
 
     private final ModeValue mode = add(new ModeValue("Mode", 0, "Single", "Switch"));
     private final NumberValue switchDelay = add(new NumberValue("Switch Delay", 0, 500, 1, 100, "%.0f ms", () -> mode.get() == SWITCH));
@@ -54,11 +59,7 @@ public final class KillAura extends Module {
     private final NumberValue range = add(new NumberValue("Range", 3, 6, 0.01, 4, "%.2f"));
     private final NumberValue fov = add(new NumberValue("FOV", 0, 360, 1, 180, "%.0f"));
     private final NumberValue rotationSpeed = add(new NumberValue("Rotation Speed", 0, 180, 1, 180, "%.0f"));
-    private final BoolValue players = add(new BoolValue("Players", true));
-    private final BoolValue mobs = add(new BoolValue("Mobs", false));
-    private final BoolValue animals = add(new BoolValue("Animals", false));
-    private final BoolValue villagers = add(new BoolValue("Villagers", false));
-    private final BoolValue invisibles = add(new BoolValue("Invisibles", false));
+    private final ListValue kinds = add(new ListValue("Targets", List.of(PLAYERS, MOBS, ANIMALS, VILLAGERS, INVISIBLES), List.of(PLAYERS)));
     private final Scaffold scaffold;
 
     private List<LivingEntity> targets = List.of();
@@ -151,11 +152,11 @@ public final class KillAura extends Module {
     private boolean isTarget(LocalPlayer player, LivingEntity entity) {
         if (entity == player || !entity.isAlive()) return false;
         if (entity instanceof Player && entity.isSpectator()) return false;
-        if (entity.isInvisible() && !invisibles.get()) return false;
-        if (entity instanceof Player) return players.get();
-        if (entity instanceof AbstractVillager) return villagers.get();
-        if (entity instanceof Monster || entity instanceof Slime || entity instanceof EnderDragon) return mobs.get();
-        if (entity instanceof Animal || entity instanceof AmbientCreature || entity instanceof WaterAnimal) return animals.get();
+        if (entity.isInvisible() && !kinds.has(INVISIBLES)) return false;
+        if (entity instanceof Player) return kinds.has(PLAYERS);
+        if (entity instanceof AbstractVillager) return kinds.has(VILLAGERS);
+        if (entity instanceof Monster || entity instanceof Slime || entity instanceof EnderDragon) return kinds.has(MOBS);
+        if (entity instanceof Animal || entity instanceof AmbientCreature || entity instanceof WaterAnimal) return kinds.has(ANIMALS);
         return false;
     }
 

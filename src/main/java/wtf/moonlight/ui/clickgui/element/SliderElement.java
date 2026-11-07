@@ -21,21 +21,27 @@ import static wtf.moonlight.ui.clickgui.Widgets.scale;
 import static wtf.moonlight.ui.clickgui.Widgets.textWidth;
 
 public final class SliderElement extends Element {
+    private static final float WIDTH = 132;
+    private static final float COMPACT_TRACK = 72;
+    private static final float GAP = 10;
+
     private final NumberValue value;
+    private final boolean compact;
     private final ImString buffer = new ImString(63);
     private boolean editing;
     private boolean focus;
     private float editReveal;
     private int lastFrame = -2;
 
-    public SliderElement(Panel panel, NumberValue value) {
+    public SliderElement(Panel panel, NumberValue value, boolean compact) {
         super(panel);
         this.value = value;
+        this.compact = compact;
     }
 
     @Override
     public float width() {
-        return scale(132);
+        return compact ? scale(COMPACT_TRACK + GAP) + resting() : scale(WIDTH);
     }
 
     @Override
@@ -54,11 +60,11 @@ public final class SliderElement extends Element {
         float target = editing ? 1 : 0;
         editReveal += (target - editReveal) * (1 - (float) Math.exp(-22 * ImGui.getIO().getDeltaTime()));
         if (Math.abs(editReveal - target) < .001f) editReveal = target;
-        Widgets.pushText(Widgets.TEXT_CONTROL);
-        float labelWidth = Math.max(textWidth(value.format(value.get())), Math.max(textWidth(value.format(value.getMin())), textWidth(value.format(value.getMax()))));
-        float restingWidth = Math.clamp(labelWidth + scale(8), scale(42), scale(90));
+        float restingWidth = resting();
         float valueWidth = restingWidth + editReveal * (Math.max(restingWidth, scale(58)) - restingWidth);
-        float trackWidth = 132.0F - valueWidth / scale(1) - 10.0F;
+        float total = width();
+        float trackWidth = (total - valueWidth) / scale(1) - GAP;
+        Widgets.pushText(Widgets.TEXT_CONTROL);
         float x = ImGui.getCursorScreenPosX();
         float y = ImGui.getCursorScreenPosY();
         ImDrawList draw = ImGui.getWindowDrawList();
@@ -66,7 +72,7 @@ public final class SliderElement extends Element {
         float amount = span > 0 ? (float) ((value.get() - value.getMin()) / span) : 0;
         float changed = Controls.slider(draw, 0, x, y + scale(10), amount, amount, trackWidth);
         if (changed != amount) value.set(value.getMin() + changed * span);
-        ImGui.setCursorScreenPos(x + scale(132) - valueWidth, y);
+        ImGui.setCursorScreenPos(x + total - valueWidth, y);
         float valueX = ImGui.getCursorScreenPosX();
         float valueY = ImGui.getCursorScreenPosY();
         float valueEndX = valueX + valueWidth;
@@ -113,27 +119,19 @@ public final class SliderElement extends Element {
             Controls.addText(draw, ImGui.getFont(), fontSize, px + centered + editReveal * (scale(4) - centered),
                     py + (scale(21) - fontSize) * .5f, theme.main, label);
             draw.popClipRect();
-            if (ImGui.isItemHovered()) {
-                Widgets.pushText(Widgets.TEXT_SMALL);
-                ImGui.pushStyleVar(ImGuiStyleVar.WindowPadding, scale(8), scale(5));
-                ImGui.pushStyleVar(ImGuiStyleVar.WindowRounding, scale(5));
-                ImGui.pushStyleVar(ImGuiStyleVar.WindowBorderSize, scale(1));
-                ImGui.pushStyleColor(ImGuiCol.PopupBg, theme.selectorBg);
-                ImGui.pushStyleColor(ImGuiCol.Border, theme.split);
-                ImGui.pushStyleColor(ImGuiCol.Text, theme.main);
-                ImGui.beginTooltip();
-                ImGui.textUnformatted(label + " (click to edit)");
-                ImGui.endTooltip();
-                ImGui.popStyleColor(3);
-                ImGui.popStyleVar(3);
-                Widgets.popFont();
-            }
         }
         draw.addRect(valueX, valueY, valueEndX, valueEndY,
                 Colors.mix(theme.split, theme.iconHighlight, response * Controls.FIELD_HOVER_BORDER), scale(5), 0, scale(1));
         ImGui.popStyleColor(6);
         ImGui.popStyleVar(3);
         Widgets.popFont();
+    }
+
+    private float resting() {
+        Widgets.pushText(Widgets.TEXT_CONTROL);
+        float label = Math.max(textWidth(value.format(value.get())), Math.max(textWidth(value.format(value.getMin())), textWidth(value.format(value.getMax()))));
+        Widgets.popFont();
+        return Math.clamp(label + scale(8), scale(42), scale(90));
     }
 
     private static Double parse(String text) {

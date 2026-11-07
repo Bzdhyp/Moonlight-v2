@@ -58,7 +58,7 @@ public final class Widgets {
         float hover = motion(ImGui.getItemID() ^ 0x9921, ImGui.isItemHovered() ? 1 : 0, 22);
         ImDrawList draw = ImGui.getWindowDrawList();
         draw.addRectFilled(x, y, x + width, y + scale(32),
-                Colors.reAlpha(theme.selectorElementHover, (int) (Colors.alpha(theme.selectorElementHover) * hover)), scale(10));
+                Colors.reAlpha(theme.selectorElementHover, (int) (Colors.alpha(theme.selectorElementHover) * hover)), scale(12));
         if (selected) Controls.check(draw, x + scale(14), y + scale(16), theme.textHighlight);
         pushText(TEXT_CONTROL);
         draw.pushClipRect(x, y, x + width, y + scale(32), true);
@@ -78,8 +78,8 @@ public final class Widgets {
         ImGui.pushStyleVar(ImGuiStyleVar.PopupBorderSize, scale(1));
         ImGui.pushStyleVar(ImGuiStyleVar.WindowPadding, scale(paddingX), scale(paddingY));
         ImGui.pushStyleVar(ImGuiStyleVar.ItemSpacing, 0, 0);
-        ImGui.pushStyleColor(ImGuiCol.PopupBg, theme.isDark() ? Colors.rgba(20, 20, 29, 235) : Colors.rgba(248, 249, 252, 245));
-        ImGui.pushStyleColor(ImGuiCol.Border, theme.isDark() ? Colors.rgba(57, 61, 76, 205) : Colors.rgba(180, 187, 202, 205));
+        ImGui.pushStyleColor(ImGuiCol.PopupBg, theme.isDark() ? Colors.rgba(20, 20, 29, 235) : Colors.rgba(236, 236, 236, 245));
+        ImGui.pushStyleColor(ImGuiCol.Border, theme.isDark() ? Colors.rgba(57, 61, 76, 205) : Colors.rgba(200, 200, 200, 205));
         ImGui.pushStyleColor(ImGuiCol.Text, theme.main);
         boolean result = Windows.beginPopup(id, flags | ImGuiWindowFlags.NoBackground, motion);
         ImGui.popStyleColor(3);
@@ -91,8 +91,8 @@ public final class Widgets {
             float width = ImGui.getWindowSizeX();
             float height = ImGui.getWindowSizeY();
             draw.pushClipRectFullScreen();
-            Effects.shadow(draw, x, y, x + width, y + height, scale(16), 0, Controls.SHADOW);
             Effects.blur(draw, x, y, x + width, y + height, scale(16), 0);
+            Effects.shadow(draw, x, y, x + width, y + height, scale(16), 0, Controls.SHADOW);
             Controls.popupBackdrop(draw, x, y, width, height);
             draw.popClipRect();
             if (ImGui.isWindowAppearing()) ImGui.getStateStorage().setFloat(ImGui.getID("##reveal"), 0);

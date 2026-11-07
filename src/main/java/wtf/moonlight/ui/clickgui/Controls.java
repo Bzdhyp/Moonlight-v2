@@ -15,6 +15,8 @@ public final class Controls {
     public static final int FIELD_SELECTION_ALPHA = 48;
     static final int SHADOW = Colors.rgb(0, 0, 0);
 
+    private static final float SLIDER_TRACK_HOVER = .12f;
+    private static final float SLIDER_SHEEN = .15f;
     private static final float TEXT_CAPTION = 10;
     private static final float TEXT_CONTROL = 14;
 
@@ -85,12 +87,30 @@ public final class Controls {
         float track = scale(width);
         ImGui.pushID(id);
         hit("##slider", x - scale(5), y - scale(8), track + scale(10), scale(19));
-        if (ImGui.isItemActive()) amount = Math.clamp((ImGui.getIO().getMousePosX() - x) / track, 0.0F, 1.0F);
-        float shown = motion(ImGui.getItemID() ^ 0xa8f1, amount, 14, initial);
+        if (ImGui.isItemActive()) {
+            ImGuiStorage storage = ImGui.getStateStorage();
+            int item = ImGui.getItemID();
+            float mouseX = ImGui.getIO().getMousePosX();
+            if (ImGui.isItemActivated()) {
+                storage.setFloat(item ^ 0x51d3, Math.clamp((mouseX - x) / track, 0.0F, 1.0F));
+                storage.setFloat(item ^ 0x51d4, mouseX);
+            }
+            amount = Math.clamp(storage.getFloat(item ^ 0x51d3) + (mouseX - storage.getFloat(item ^ 0x51d4)) / track, 0.0F, 1.0F);
+        }
+        int item = ImGui.getItemID();
+        float shown = motion(item ^ 0xa8f1, amount, 12, initial);
+        float hover = motion(item ^ 0x65f0, ImGui.isItemActive() ? 1 : ImGui.isItemHovered() ? .7f : 0, 18, -1);
         ImGui.popID();
-        draw.addRectFilled(x, y, x + track, y + scale(3), c(34, 38, 48), scale(2));
-        draw.addRectFilled(x, y, x + track * shown, y + scale(3), c(75, 126, 255), scale(2));
-        draw.addCircleFilled(x + track * shown, y + scale(1.5f), scale(5.5f), c(247, 248, 252));
+        int accent = c(75, 126, 255);
+        draw.addRectFilled(x, y, x + track, y + scale(3), Colors.mix(c(34, 38, 48), accent, SLIDER_TRACK_HOVER * hover), scale(1.5f));
+        float fill = track * shown;
+        if (fill > .1f) {
+            int start = Natives.vertexCount(draw.ptr);
+            draw.addRectFilled(x, y, x + fill, y + scale(3), Colors.rgb(255, 255, 255), scale(1.5f));
+            Natives.gradient(draw.ptr, start, x, y, x + fill, y, accent, Colors.mix(accent, c(247, 248, 252), SLIDER_SHEEN));
+        }
+        draw.addCircleFilled(x + fill, y + scale(1.5f), scale(8 + 2 * hover), Colors.reAlpha(accent, (int) (30 + 40 * hover)), 24);
+        draw.addCircleFilled(x + fill, y + scale(1.5f), scale(5 + .6f * hover), c(247, 248, 252), 20);
         return amount;
     }
 
@@ -100,12 +120,12 @@ public final class Controls {
         for (long list : Windows.subtree()) Natives.transform(list, 0, 0, 1, offset, 0, progress);
     }
 
-    static void chevron(ImDrawList draw, float x, float y, int color) {
+    public static void chevron(ImDrawList draw, float x, float y, int color) {
         draw.addLine(x, y, x + scale(3), y + scale(3), color, scale(1.3f));
         draw.addLine(x + scale(3), y + scale(3), x, y + scale(6), color, scale(1.3f));
     }
 
-    static void check(ImDrawList draw, float x, float y, int color) {
+    public static void check(ImDrawList draw, float x, float y, int color) {
         draw.addLine(x, y, x + scale(3), y + scale(3), color, scale(1.5f));
         draw.addLine(x + scale(3), y + scale(3), x + scale(8), y - scale(3), color, scale(1.5f));
     }
@@ -148,8 +168,13 @@ public final class Controls {
     private static int c(int r, int g, int b, int a) {
         int raw = Colors.rgba(r, g, b, a);
         Theme theme = palette;
-        if (theme == null || theme.isDark()) return raw;
+        if (theme == null) return raw;
+        if (r == 75 && g == 126 && b == 255) return Colors.reAlpha(theme.iconHighlight, a);
         if (r == 17 && g == 19 && b == 27) return theme.modulePanelBg;
+        if (r == 20 && g == 20 && b == 29) return theme.fade(theme.isDark() ? raw : Colors.rgba(236, 236, 236, 245));
+        if (theme.isDark()) return raw;
+        if (r == 133 && g == 144 && b == 156) return Colors.rgb(255, 255, 255);
+        if (r == 139 && g == 143 && b == 154) return theme.secondary;
         if (r == 31 && g == 34 && b == 44) return theme.windowBorder;
         if (r == 29 && g == 33 && b == 43) return theme.switchDisabledBg;
         if (r == 89 && g == 94 && b == 106) return theme.secondary;
@@ -158,8 +183,7 @@ public final class Controls {
         if (r == 32 && g == 35 && b == 46) return theme.split;
         if (r == 170 && g == 173 && b == 184) return theme.main;
         if (r == 34 && g == 38 && b == 48) return theme.sliderBg;
-        if (r == 20 && g == 20 && b == 29) return Colors.rgba(248, 249, 252, 245);
-        if (r == 57 && g == 61 && b == 76) return Colors.rgba(180, 187, 202, 205);
+        if (r == 57 && g == 61 && b == 76) return Colors.rgba(200, 200, 200, 205);
         return raw;
     }
 }

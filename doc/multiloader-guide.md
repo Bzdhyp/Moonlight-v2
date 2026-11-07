@@ -59,6 +59,7 @@ Moonlight-v2-NextGen/
 │  ├─ META-INF/neoforge.mods.toml 只打进 NeoForge 包
 │  ├─ moonlight.mixins.json      两边共用
 │  └─ moonlight.ct               Fabric 的 class tweaker（访问扩展），只打进 Fabric 包
+├─ src/preview/java/             不启动游戏的 UI 预览窗口，只在 Fabric 节点编译，不进 jar（见 8.6）
 ├─ versions/26.3-fabric/         Stonecutter 自动创建的子项目目录，产物在 build/ 下
 ├─ versions/26.3-neoforge/
 ├─ run/                          两个加载器共用的游戏运行目录（不进 git）
@@ -286,8 +287,10 @@ Moonlight.EVENT_BUS.register(new ChatFilter());
 | `client.TickEvent` | `Minecraft.tick` 开头 / 返回 | — | `PRE` / `POST`，`getPhase()` |
 | `client.WorldChangeEvent` | `Minecraft.setLevel` / `clearClientLevel` 末尾 | — | 单例；进入或离开世界 |
 | `client.ScreenOpenEvent` | 包住 `Gui.setScreen` | 是 | `getScreen()`；26.3 的界面切换在 `Gui` 里，`Minecraft` 已没有 `setScreen` |
-| `input.KeyInputEvent` | `KeyboardHandler.keyPress` 开头 | 是 | `getKey()`（SDL scancode，对应 `InputConstants.KEY_*`）、`isPress()`、`isRepeat()` |
+| `input.KeyInputEvent` | `KeyboardHandler.keyPress` 开头 | 是 | `getKey()`（SDL scancode，对应 `InputConstants.KEY_*`）、`getEvent()`（原始 `KeyEvent`）、`isPress()`、`isRepeat()` |
+| `input.CharInputEvent` | `KeyboardHandler.charTyped` 开头 | 是 | `getCodepoint()` |
 | `input.MouseInputEvent` | `MouseHandler.onButton` 开头 | 是 | `getButton()`（SDL 编号：左 1、中 2、右 3）、`isPress()` |
+| `input.MouseMoveEvent` | `MouseHandler.onMove` 末尾 | 否 | 不带数据，位置用 `mouseHandler.xpos()` / `ypos()` |
 | `input.MouseScrollEvent` | `MouseHandler.onScroll` 开头 | 是 | 不带数据 |
 | `network.PacketSendEvent` | `Connection.send` 里调用 `sendPacket` 处 | 是 | `getPacket()`；只处理客户端自己的连接；连接建立前排队的包不经过这里 |
 | `network.PacketReceiveEvent` | `Connection.channelRead0` 里调用 `genericsFtw` 处 | 是 | `getPacket()`；**在网络线程触发**，不要在里面直接改游戏状态，需要时 `Minecraft.getInstance().execute(...)` |
@@ -370,20 +373,32 @@ MoonlightClient.getCommands().register(new EchoCommand());
 
 | 类 | 作用 |
 |---|---|
-| `Bindable` | 可绑定的东西：`getKey()`、`onBind(pressed)`、`triggersOnRelease()` |
-| `Bind` | 现成的实现：有名字、按键、模式（切换 / 按住）、开关状态 |
-| `BindManager` | 收到按键 / 鼠标事件后分发给绑定了这个键的对象；按名字查找 `Bind` |
-| `BindCapture` | "按下一个键来绑定"：开始后下一次按键就成为绑定；`getTarget()` 是正在等待的 `Bind`，`cancel()` 取消 |
+| `Bindable` | 接收按键的东西：`onKey(code, pressed)`、每 tick 的 `reconcile()` |
+| `Bind` | 每个模块一个：有名字、开关状态，以及任意多个 `Hotkey` |
+| `Hotkey` | 一个热键：按键（Key）、模式（Toggle / Hold）、Value、Visible |
+| `BindManager` | 收到按键 / 鼠标事件后分发给所有 `Bind`；按名字查找 `Bind` |
+| `BindCapture` | "按下一个键来绑定"：开始后下一次按键就写进目标 `Hotkey`；`getTarget()` 是正在等待的热键，`cancel()` 取消 |
 
 **键码约定**（`KeyUtils`）：`0` = 未绑定；正数 = SDL scancode（就是 `InputConstants.KEY_*`）；负数 = 鼠标键，`-1` 左键、`-2` 中键、`-3` 右键、`-4`/`-5` 侧键（26.3 的 SDL 鼠标编号取负）。
 
+**`Hotkey` 的四个属性**
+
+| 属性 | 默认 | 作用 |
+|---|---|---|
+| Key | 构造时传入 | 按哪个键，`0` 表示还没录 |
+| Mode | Toggle | Toggle：每按一次在开 / 关之间切换，Value 不起作用；Hold：按住时把模块设成 Value，松开恢复按下前的状态 |
+| Value | 开 | Hold 模式按住期间模块的状态，关掉就是"按住时临时关闭" |
+| Visible | 开 | 是否显示在热键列表 HUD（5.14） |
+
 **`Bind` 的行为**
 
-- 切换模式：按下切换开关，松开不处理。
-- 按住模式（`hold`）：按下开启，松开关闭。每 tick 还会用 `KeyUtils.isDown` 查一次物理按键：如果开着但键已经不在按着（比如切出窗口时松开、松开事件被吞了），自动关掉。
-- 按下时要满足触发条件，默认是没有打开任何界面；`setGate(...)` 可以换掉（ClickGUI 用它在自己的界面里也能关闭）。**松开不受这个限制**，保证按住模式能正常关闭。
+- 一个模块可以有任意多个热键，各自独立生效，例如 F 切换、R 按住临时开启。
+- Hold 按下时记住模块原来的状态，松开时恢复。每 tick 的 `reconcile()` 还会用 `KeyUtils.isDown` 查一次物理按键：按着的 Hold 键已经松开（比如切出窗口时松开、松开事件被吞了）就按松开处理。删除一个正按着的 Hold 热键时也会先恢复。
+- 按下时要满足触发条件，默认是没有打开任何界面；`setGate(...)` 可以换掉（ClickGUI 用它在自己的界面里也能关闭）。**松开不受这个限制**，保证 Hold 能正常恢复。
 - 构造时传入状态回调 `new Bind(name, state -> ...)`，开关状态变化时调用。外部改了状态（比如用命令开关了模块）用 `sync(state)` 同步，不触发回调。
-- 按键和模式随模块一起保存在配置里（见 5.8），`Bind.save()` / `load()` 负责读写 `{"key", "hold"}`。
+- `add` / `remove` / `clear` 管理热键，`primary()` 返回第一个热键（没有就新建一个），`isBound()` 表示至少有一个录了键的热键。
+- 热键随模块一起保存在配置里（见 5.8），`Bind.save()` 写成数组 `[{"key", "hold", "value", "visible"}, ...]`。`load()` 也认旧格式的单个对象 `{"key", "hold"}`，读成一个热键（键为 0 时不建）。
+- ClickGUI 模块构造时自带一个右 Shift 的 Toggle 热键，Visible 默认关，打开界面时不会出现在热键列表里。
 
 每个模块自带一个同名的 `Bind`，回调就是 `setEnabled`，由 `ModuleManager` 注册到 `BindManager`（见 5.7）。`BindManager` 和 `ModuleManager` 都在 `MoonlightClient.init()` 里创建。
 
@@ -393,10 +408,10 @@ MoonlightClient.getCommands().register(new EchoCommand());
 
 | 写法 | 作用 |
 |---|---|
-| `.bind` | 列出所有绑定 |
-| `.bind <名字>` | 开始捕获：接下来按的键就是绑定，Esc 清除绑定，鼠标左键取消 |
-| `.bind <名字> <按键>` | 直接设置按键，`none` 解除绑定 |
-| `.bind <名字> <按键> <toggle\|hold>` | 同时设置模式 |
+| `.bind` | 列出所有模块和它们的热键 |
+| `.bind <名字>` | 开始捕获，录进这个模块的第一个热键（没有就新建）：接下来按的键就是绑定，Esc 清除，鼠标左键取消；最后没录上键的热键会被删掉 |
+| `.bind <名字> <按键>` | 直接设置第一个热键的按键，`none` 删除这个模块的全部热键 |
+| `.bind <名字> <按键> <toggle\|hold>` | 同时设置第一个热键的模式 |
 
 名字就是模块名，不区分大小写、忽略空格（`Kill Aura` 写成 `killaura` 即可），例如 `.bind Sprint R`。按键名见下面的 `KeyUtils`。
 
@@ -448,8 +463,9 @@ ChatUtils.error("Unknown module: {}", name);
 
 ```
 module
-├─ Module          模块基类：名字、分类、Bind、开关、设置项
+├─ Module          模块基类：名字、分类（可选子分类）、Bind、开关、设置项
 ├─ Category        分类
+├─ Subcategory     子分类（目前 Render 下的 Overlay、World）
 ├─ ModuleManager   创建模块、按名字查找、注册每个模块的 Bind
 └─ impl
    ├─ client / combat / misc / movement / player / render / world   按分类放模块
@@ -460,6 +476,7 @@ module
 ```
 
 - `impl` 下每个分类一个包，目前 `combat`（`KillAura`）、`movement`（`Sprint`）、`player`（`Scaffold`）和 `render`（`FullBright`、`ClickGui`）里有模块，其余是空包（只放了 `package-info.java`，方便 git 保留目录；包里有了第一个类就把它删掉）。
+- 分类下面可以再分子分类：模块构造时传 `Subcategory` 而不是 `Category`（`super("Watermark", Subcategory.OVERLAY)`），分类由子分类决定。有子分类的分类在侧栏里可以展开，它的模块要全部挂到子分类上。现在 Render 分成 Overlay（`Watermark`、`ClickGui`、`PostProcess`）和 World（`FullBright`）。子分类同样按"不留零用法"，有模块了再加，图标在 `PageLayout.icon(Subcategory)`。
 - 模块要用到另一个模块时，由 `ModuleManager` 在构造时传进去，不做全局查找。例如 `KillAura` 构造时拿到 `Scaffold`，`Scaffold` 开着时 `KillAura` 不工作，免得两个模块抢着转头。
 - `Category` 枚举目前是 `MOVEMENT`、`RENDER`。在某个分类的包里写下第一个模块时，再给 `Category` 加对应的常量（按"不留零用法"，没有模块的分类不加，`.toggle` 列表里也不会出现空分类）。
 
@@ -468,7 +485,7 @@ module
 - `setEnabled(true)` 时先调用 `onEnable()`，再把模块注册到事件总线；`setEnabled(false)` 时注销。所以模块里的 `@Subscribe` 方法只在模块开着时收到事件，不用自己判断开关。需要在开启时初始化状态的模块重写 `onEnable()`（例如 `FullBright` 记下当前亮度），关闭时要收尾的重写 `onDisable()`（在注销之后调用，例如 `ClickGui` 关掉界面）。
 - 每个模块自带一个同名的 `Bind`：按绑定键切换（或按住）时开关模块；用命令开关模块时，`Bind` 的状态跟着同步。默认打开任何界面时绑定键都不生效，模块可以用 `getBind().setGate(...)` 换成自己的条件（`ClickGui` 允许在自己的界面里按绑定键关闭，正在输入文字时除外）。
 - 模块的开关状态和绑定都保存在配置里，重启后自动恢复（见 5.8）。`isPersistent()` 返回 `false` 的模块只保存绑定、不保存开关（`ClickGui`：不会一启动就弹出界面）。
-- 设置项用 `add(...)` 声明成字段，按声明顺序登记到模块上：`private final BoolValue swing = add(new BoolValue("Swing", true));`。登记过的设置项会跟着模块存进配置，并显示在 ClickGUI 模块行的齿轮弹窗里（见 5.9）。
+- 设置项用 `add(...)` 声明成字段，按声明顺序登记到模块上：`private final BoolValue swing = add(new BoolValue("Swing", true));`。登记过的设置项会跟着模块存进配置，并显示在 ClickGUI 里（设置多的模块展开成卡片，其余在模块行的设置弹窗里，见 5.9、5.10）。
 
 **`.toggle` 命令**
 
@@ -537,7 +554,7 @@ public final class Sprint extends Module {
 | `Range` | 4.00 | 索敌距离（3～6），从眼睛算到目标碰撞箱 |
 | `FOV` | 180 | 视野角度（0～360），目标要在玩家视线左右各一半以内 |
 | `Rotation Speed` | 180 | 每 tick 最多转多少度 |
-| `Players` / `Mobs` / `Animals` / `Villagers` / `Invisibles` | 开 / 关 / 关 / 关 / 关 | 打哪些实体 |
+| `Targets` | Players | 打哪些实体，多选：Players、Mobs、Animals、Villagers、Invisibles（`ListValue`，ClickGUI 里是一行下拉框，点开勾选） |
 
 ### 5.8 配置
 
@@ -549,13 +566,13 @@ public final class Sprint extends Module {
   ```json
   {
     "modules": {
-      "Sprint": { "enabled": true, "bind": { "key": 21, "hold": false } },
+      "Sprint": { "enabled": true, "bind": [{ "key": 21, "hold": false, "value": true, "visible": true }] },
       "Scaffold": {
         "enabled": false,
-        "bind": { "key": 0, "hold": false },
+        "bind": [],
         "values": { "45 Degrees": false, "Swing": true, "Raycast": "Normal", "Rotation Speed": 127.0 }
       },
-      "ClickGUI": { "bind": { "key": 229, "hold": false } }
+      "ClickGUI": { "bind": [{ "key": 229, "hold": false, "value": true, "visible": false }] }
     },
     "client": { "Theme": "Dark", "Size": 100.0, "Custom Client Name": false, "Client Name": "" }
   }
@@ -581,6 +598,7 @@ public final class Sprint extends Module {
 - 命名配置只在手动 `save` 时写入，不会被自动保存改动；想把改过的状态存回去就再 `save` 一次。
 - 配置名只能用英文字母、数字、空格、`_`、`-`、`.`，最长 63 个字符，开头结尾不能是空格或 `.`，不能以 `.json` 结尾。名字是命令的最后一个参数，可以带空格，支持 Tab 补全。
 - 加载时，文件里没有的模块保持现状；文件损坏或值的类型不对时加载失败并记一条警告（`moonlight/config`），游戏不受影响。
+- 某个模块的 `onEnable()` / `onDisable()` 抛异常时，只记一条警告（`Module <名字> failed to switch on/off`），后面的模块和 Client 设置继续加载，不会因为一个模块让整份配置读一半。
 - 写文件时先写 `<名字>.json.tmp` 再整体替换，中途崩溃也不会留下写了一半的配置。
 
 **当前配置**
@@ -597,10 +615,25 @@ public final class Sprint extends Module {
 |---|---|---|
 | `BoolValue` | `Boolean` | 开关 |
 | `NumberValue` | `Double` | `min` / `max` / `step`，`set` 时按步长四舍五入再夹到范围内；`format` 是 `String.format` 的格式，例如 `"%.0f%%"`；可以多传一个可见条件 |
-| `ModeValue` | `Integer`（下标） | 选项列表；配置里存选项名字，不存下标 |
+| `ModeValue` | `Integer`（下标） | 选项列表；配置里存选项名字，不存下标。控件里点选项走 `select(i)`，会触发 `onSelect` 登记的回调（读配置走 `set`，不触发），重复点当前选项也会触发 |
 | `TextValue` | `String` | 文本；构造时传可见条件 |
+| `ListValue` | `Set<String>`（勾选了哪些） | 多选，两种构造。只传选项名列表 `ListValue(name, List<String>, 默认勾选)` 是普通勾选列表（`isSortable()` 为 false）：弹窗 160 宽，每行只有对勾和名字，不能拖动，读配置时也不改顺序，例如 KillAura 的 Targets。下面说的都是可排序版本：构造时传 `选项名 → 图标字形` 的有序表，`getOptions()` 返回当前顺序，`move(选项, 下标)` 改顺序。配置里存成 `{"order": [全部选项], "selected": [勾选的]}`；读到旧格式（只有勾选项的名字数组）时只改勾选、顺序不变。控件是一个下拉框，显示已选项摘要（按当前顺序）；点开是勾选列表（`ListElement`，188 宽），每行是对勾、图标（`hud-icons.ttf`）、名字、右侧拖动手柄（Font Awesome `grip-vertical`，被拿起的那一行渐变成高亮色，深色主题下是白色）。点一下切换勾选，弹窗不关；按住 0.25 秒或者按住移动超过 4 px 就拿起这一行，跟着鼠标上下走，其他行按 `1 - e^(-18·dt)` 滑开让位，顺序实时写回 `ListValue`，松手时那一行滑进空位，不切换勾选 |
+| `ColorValue` | `Integer`（ImGui 颜色，含 alpha） | 颜色；配置里存 `#AARRGGBB`（旧的 `#RRGGBB` 按不透明读入），记住构造时的初始值，`reset()` 恢复。控件是色块，点开是调色板（见下） |
 
-用在两个地方：ClickGUI 的 Client 设置（`ClientSettings`），以及模块用 `Module.add(...)` 登记的设置项（目前是 `Scaffold`）。模块的设置项显示在模块行齿轮弹窗里、`Bind` 那一行下面，顺序就是声明顺序，`Row.of` 按类型选控件。
+**调色板**（`element.Palette`，212 × 262，`ColorElement` 和账号菜单的 Theme Color 共用）：
+
+- 上面是圆角的饱和度 / 亮度方块，选中点是白边圆圈。方块用两层圆角矩形叠出来：先白到色相的横向渐变，再透明到黑的纵向渐变。顶点颜色用 `Natives.gradient` 按位置重算，并保留抗锯齿边缘的 alpha。
+- 下面是横向色相条（6 段）和透明度条（棋盘格底 + 颜色渐变）。
+- 饱和度 / 明度方块的取色点、色相条和透明度条的滑块都是圆形（填当前颜色，透明度条的滑块填带当前透明度的颜色，2 px 白边），和细滑条同一套交互效果：外圈一层主题色光环，半径比滑块大 3 + 2 × 状态值，透明度 30 + 40 × 状态值；滑块本身随状态值放大 0.6。状态值悬停 0.7、拖动 1，按 `1 - e^(-18·dt)` 平滑。
+- 最下面一行：
+  - 格式下拉 HEX / RGB / HSV：带图标，选中项打勾。HEX 是 `#AARRGGBB`；RGB、HSV 不透明时只显示三个数，有透明度时多一个 alpha。
+  - 当前色块。
+  - 数值输入框：可以直接改，回车或失焦时按当前格式解析，解析不了就不改。
+  - 恢复初始颜色：已是初始值时变暗。
+  - 复制到剪贴板。
+- 饱和度或亮度为 0 时色相保留上一次的值，拖到黑 / 白再拖回来不会跳色。
+
+用在两个地方：ClickGUI 的 Client 设置（`ClientSettings`），以及模块用 `Module.add(...)` 登记的设置项。模块的设置项显示在模块的展开卡片或设置弹窗里（弹窗中在 `Bind` 那一行下面），顺序就是声明顺序，`Row.of` 按类型选控件。可见条件返回 `false` 的设置项不显示，但照样存进配置（`Watermark` 的 X / Y 就是这样存拖动位置的）。
 
 ### 5.10 ClickGUI
 
@@ -614,24 +647,34 @@ ui
 │  ├─ ImGuiManager  创建上下文、加载字体和样式，每帧 NewFrame → 画界面 → Render
 │  ├─ ImGuiRenderer 用游戏的 RenderPearl 接口画 ImGui 的绘制数据，并管理 ImGui 的纹理
 │  ├─ Input         把游戏的键盘、鼠标、文字输入转成 ImGui 的输入事件
-│  ├─ Fonts         四个字体文件
+│  ├─ Fonts         六个字体文件和 HUD 字号换算系数
 │  ├─ Natives       直接读写 ImGui 结构体（偏移、校验）
 │  ├─ Effects       给 ImGui 形状加模糊 / 阴影的接口（见 5.12）
+│  ├─ Textures      把游戏纹理（如玩家皮肤）映射成 ImGui 纹理 ID（见 5.13）
 │  └─ post          后处理的 GPU 部分：Blur、Bloom、Kawase、Area、Target
+├─ hud              HUD 元素（见 5.13）
+│  ├─ Hud           所有 HUD 元素的绘制入口，编辑模式下的拖拽、右键设置和聊天栏输入转发
+│  ├─ HudElement / Rect 可拖拽元素的接口和它画出来的矩形
+│  ├─ Style         每帧传给元素的全局样式：HUD Scale、深 / 浅色、主题色
+│  ├─ WatermarkRenderer 水印的排版、动画和绘制
+│  ├─ Tracker / Snapshot 水印要用的游戏数据：服务器、延迟、TPS、坐标、速度、版本
+│  ├─ Rolling       数字逐位滚动
+│  ├─ FrameStats    帧时长统计：FPS、1% low
+│  └─ Skin          本地玩家皮肤纹理的查找
 └─ clickgui         ClickGUI 本身
    ├─ ClickGuiScreen 打开 ClickGUI 时显示的 Screen：转发输入、切换光标和文字输入
    ├─ Panel         主窗口（748×576，侧栏 158，顶栏 56，圆角 14）、缩放和入场动画
    ├─ TopBar        字标、配置下拉框、搜索
-   ├─ PageLayout    侧栏导航、两列模块卡片、Client 设置页、左下角账号菜单
-   ├─ Row           一行设置（名字 + 控件 + 齿轮弹窗）
-   ├─ element       控件：SwitchElement、SliderElement、SelectorElement、TextElement、BindElement
+   ├─ PageLayout    侧栏导航（含可展开的子分类）、两列模块卡片、Client 设置页、左下角账号菜单
+   ├─ Row           一行设置（名字 + 键盘图标 + `...` + 控件 + 设置弹窗）
+   ├─ element       控件：SwitchElement、SliderElement、SelectorElement、TextElement、BindElement、ColorElement、ListElement，以及调色板 Palette
    ├─ Controls      开关、选择器、滑条、卡片、弹窗底板等基础绘制和动画
    ├─ Widgets       字体、缩放、选项行、弹窗的进出动画
    ├─ Popups        弹窗关闭后的淡出快照
    ├─ Windows       记录这一帧画过的窗口，供入场 / 翻页 / 弹窗动画变换顶点
    ├─ Placement     主窗口居中和拖动后的位置
-   ├─ Theme / Colors 深色、浅色两套配色和颜色运算
-   └─ ClientSettings Theme、Size、Custom Client Name、Client Name
+   ├─ Theme / Colors 深色、浅色配色（按主题色生成）和颜色运算
+   └─ ClientSettings Theme、Theme Color、Background Alpha、Size、HUD Scale、HUD Alpha、HUD Menu Size、Custom Client Name、Client Name
 ```
 
 **渲染**
@@ -658,17 +701,58 @@ ui
 | `sst-medium.ttf` | 正文，15 px 基准，3 倍横向过采样 |
 | `medium.ttf` | 正文缺字时的回退（中日韩等），合并进正文字体 |
 | `fa-solid-900.ttf` | 图标（Font Awesome 5 Solid），13 px |
-| `extrabold.ttf` | 左上角字标，28 px，带 1.2 字距和两秒一轮的错位动画 |
+| `extrabold.ttf` | 左上角字标，28 px，带 1.2 字距和两秒一轮的错位动画；也用作水印 logo |
+| `inter-medium.ttf` | 水印文字（Inter Medium，wght 500 / opsz 14 的静态实例，只含 U+0020–007E、U+00A0–00FF，17 KB） |
+| `inter-regular.ttf` | 热键列表 HUD 的文字（Inter Regular，wght 400，其余同上，`Fonts.hudRegular()`）；和 Medium 同一套纵向度量，`HUD_EM` / `HUD_ASCENT` 通用 |
+| `hud-icons.ttf` | HUD 图标，12 个 Material Symbols 字形：U+E26B `bar_chart`（wght 300，已水平镜像）、U+E7FD `person`（实心）、U+F3E6 `history_2`（已顺时针转 90°）、U+E875 `dns`、U+E63E `wifi`、U+E9E4 `speed`、U+E0C8 `location_on`、U+EA0B `bolt`、U+F720 `deployed_code`、U+E51C `dark_mode`（实心）、U+E853 `account_circle`（实心）、U+E660 `auto_awesome_mosaic`（Outlined，wght 300，热键列表标题）。前 11 个是 Rounded，码位记在 `Watermark.Item` 里，HUD 和 Items 勾选列表共用。子集字体从 Google Fonts CSS2 接口（`icon_names=...`）下载，用 `test/watermark/build_fonts.py` 合成 |
 
 ImGui 1.92 要求字体数据在整个图集生命周期里一直有效，imgui-java 直接传 `byte[]` 的接口做不到，所以 `Fonts` 先把字体解到临时目录，用 `addFontFromFileTTF` 让 ImGui 自己读进内存，读完马上删掉临时文件。两个大字体各约 8 MB，模组 jar 因此约 22 MB。
 
 **页面**
 
-- 侧栏 MODULES 下按 `Category` 列出分类（图标在 `PageLayout.icon`，加分类时要补一个），超过 5 个分类时这一栏可以滚动；CLIENT 下是 Settings。
-- 模块页：所有模块放在 General 卡片里，按数量均分左右两列，两列各自滚动。模块行右边是开关和齿轮，齿轮弹窗里第一行是 `Bind`：Click / Hold 切换、按键（点了以后按键或鼠标侧键绑定，左键取消）、Delete 清除；下面是这个模块的设置项（见 5.9）。
-- Settings 页：Theme（Light / Dark）、Size（60%～150%，拖动滑条或点数值直接输入）、Custom Client Name、Client Name（打开 Custom Client Name 后出现；字标和账号菜单里的名字跟着变，默认 Moonlight）。
+- 侧栏 MODULES 下按 `Category` 列出分类（图标在 `PageLayout.icon`，加分类时要补一个）；CLIENT 下是 Settings。
+  - 有子分类的分类（Render）点一下展开或收起，子分类缩进显示在下面，高度带动画。
+  - 展开时如果当前页不在它下面，会跳到第一个子分类；收起时保持当前页，这时父项的文字高亮。
+  - 内容超过 290 时这一栏可以滚动。
+  - 页码：分类是 `ordinal`，子分类是 `100 + ordinal`，Client 页是 `-1`。
+- 模块页（`PageLayout.rebuild`）分两种卡片，左右两列各自滚动：
+  - 可见设置项不少于 3 个（`EXPAND`）的模块单独展开成一张卡片，标题是大写的模块名。第一行是 `Enabled` 和开关（`Row.enabled`），下面每个设置项一行，控件和 Client 设置页一样（下拉框、带数值框的滑条、开关……）。
+  - 其余模块合并到最前面的 `TOGGLES` 卡片，每行是模块名、开关，开关左边是 `...`（三个小圆点，悬停 / 打开时变亮）。点 `...` 打开这个模块的设置弹窗。
+  - 在 TOGGLES 的行上或展开卡片的 `Enabled` 行上右键，也会打开设置弹窗；`Enabled` 行的弹窗里只有 `Bind`，因为设置项已经都在卡片上了。
+  - 模块绑了键时，名字后面跟一个键盘图标（平时浅灰，热键菜单打开时变主题色），点它直接打开热键菜单。
+  - 卡片按顺序放进当前更矮的那一列（高度 = 标题 20 + 间距 12 + 37 × 可见行数）。卡片标题统一大写，Client 页的卡片也是。
+- 设置弹窗（`...`、右键模块行、右键 HUD 都是它）：宽 260（右键 HUD 时是 244），顶部是加粗的模块名，下面一张圆角内卡片，行高 30。右键 HUD 的弹窗按 HUD Menu Size 默认 125% 缩放，屏幕上约宽 305、行高 37.5，是按参考截图量出来的。第一行是 `Bind`，右边的键盘图标点开热键菜单（`BindElement`，见下）；下面是这个模块的设置项（见 5.9）。
+- 所有数值滑条右边都有数值框（`SliderElement`），显示格式化后的值，点一下变成输入框，回车或点别处生效（解析不了的输入忽略，超出范围按 `NumberValue` 夹到范围内）。Client 设置页和展开卡片里的整体宽 132；设置弹窗和账号菜单里是"紧凑"布局：轨道固定 72，再加 10 的间距和数值框。数值框宽度按最小 / 最大 / 当前值里最长的文字 + 8，限制在 42～90，编辑时至少放宽到 58，轨道相应变短。没有悬停提示框。所有细滑条（`Controls.slider`）按下时跳到点击位置，之后按"按下时的值 + 鼠标横向位移 / 滑条宽度"计算，不看鼠标相对滑条的绝对位置，所以滑条本身在拖动中移动（比如弹窗跟着变大的 HUD 走）也不会影响数值。
+- 细滑条的样子（设置弹窗、展开卡片、Client 设置页、账号菜单都共用 `Controls.slider`，颜色都走主题映射）：
+  - 轨道高 3、圆角 1.5，底色是 `sliderBg`。悬停 / 拖动时按状态值（悬停 0.7、拖动 1，`1 - e^(-18·dt)` 平滑）混入 12% 主题色，轨道微微变亮。
+  - 填充从左到右是主题色到"主题色混 15% 白色"的横向渐变，越靠近滑块越亮；进度按 `1 - e^(-12·dt)` 平滑。渐变是先画白色的抗锯齿圆角矩形、再用 `Natives.gradient` 改顶点色做的，边缘和轨道一样平滑。`addRectFilledMultiColor` 没有抗锯齿，3 px 高的条落在半像素上时边缘会出锯齿，所以不用。
+  - 滑块外面先画一圈主题色光环，半径 8 + 2 × 状态值，透明度 30 + 40 × 状态值；里面是白色滑块，半径 5 + 0.6 × 状态值。静止时光环很淡，悬停和拖动时逐渐放大、变亮。
+- 热键菜单（`BindElement`，168 宽，行高 30，在鼠标位置弹出）：
+  - 每个热键一行：键盘图标 + `Toggle "F"` / `Hold "F"`（正在录键时显示 `Press a key...`）+ 右箭头，点开它的子菜单。
+  - `All Hotkeys`：右侧列出所有模块的全部热键（模块名 + `Toggle "F"`），只看不改。
+  - `New Hotkey`：新建一个 Toggle 热键并马上开始录键，同时打开它的子菜单；没录上键就取消（鼠标左键）时这个热键会被删掉。
+  - 分隔线下面是红色的 `Reset All`：删除这个模块的全部热键。
+  - 子菜单（184 宽，贴在菜单右边、和这一行对齐）：`Key`（右边是按键徽标，点了重新录键，录键中显示 `...`）、`Mode`（主题色胶囊，Toggle 是半圆图标、Hold 是手掌图标，点一下切换）、`Value` 和 `Visible`（开关）、分隔线、红色的 `Delete`。
+  - Mode 胶囊切换时有过渡动画（速率 14）：胶囊宽度在两种文字宽度之间平滑过渡，旧的图标和文字向上滑出、新的从下方滑入，透明度分别按 `(1 - t)²` 和 `t²` 交叉淡化，和数字滚动的做法一致。每个热键单独记动画状态。
+  - 图标都是 Font Awesome 5：键盘 F11C、列表 F03A、加号 F055、撤销 F0E2、钥匙 F084、链接 F0C1、眼睛 F06E、垃圾桶 F2ED、半圆 F042、手掌 F256。
+- Settings 页（按这个顺序，和账号菜单里 HUD Alpha 下面紧跟 Background Alpha 一致）：Theme（Dark / Light）、Theme Color（色块 + 调色板）、Size（60%～150%，拖动滑条或点数值直接输入）、HUD Scale（所有 HUD 元素的缩放，50%～200%，默认 100%）、HUD Alpha（所有 HUD 背景色透明度的倍数，0%～100%，默认 100%，即设计稿原本的透明度：水印 70%、热键列表标题 70%、小胶囊 60%；只影响底色，文字、图标、模糊和阴影不变；经 `Style.alpha()` 传给每个 HUD 元素）、Background Alpha（整体 UI 底色的不透明度，0%～100%，默认 100%）、HUD Menu Size（右键 HUD 弹出的设置窗口的缩放，60%～150%，默认 125%，和 Size 互不影响）、Custom Client Name、Client Name（打开 Custom Client Name 后出现；字标里的名字跟着变，默认 Moonlight）。
 - 顶栏：配置下拉框（见 5.8）和搜索（按名字过滤所有模块，关闭搜索或换页时清空）。
-- 左下角是当前 Minecraft 账号名，点开后可以进 Client settings、切浅色主题、调界面缩放。
+  - 搜索：右上角是手画的放大镜（半径 5、线宽 2 的圆加斜柄），平时是 `secondary` 和 `main` 按 0.75 混合的浅灰，悬停或打开时变成 `textHighlight`。点它向左展开 150 宽的输入框（`1 - e^(-20·dt)` 展开，`popupEase` 缓动）。
+  - 输入框和顶栏控件同一套样式：高 29、圆角 6。状态值输入中为 1、悬停为 0.65，按 `1 - e^(-18·dt)` 平滑；底色在面板底色和 `buttonHoveredBg` 之间、描边在 `split` 和主题色之间按状态值混合。文字 14 号，按字体行高上下居中（不按字形墨迹居中，否则带下伸字母时会偏上、打字时上下跳），空着时显示灰色提示 `search modules`。
+- 左下角：玩家皮肤头像（脸 + 帽子层，`Textures.face`）、账号名，下面一行是 Beta。点开是账号菜单（宽 280），头部是头像、账号名和 Beta，下面依次是：
+  - Menu Scale、HUD Scale、HUD Alpha、Background Alpha：行内紧凑滑条加数值框（和设置弹窗里的一样，点数字可以直接输入），拖动时实时改 Size / HUD Scale / HUD Alpha / Background Alpha。Menu Scale 拖动中面板不缩放，松手后才生效，所以不会边拖边跳。
+  - Theme：右侧弹出 Dark / Light，当前项高亮。
+  - Theme Color：右侧是色块，点开调色板。
+  - Client Settings：跳到 Settings 页。
+- 二级弹窗放不下时往上移，不会超出屏幕底部。
+- 圆角要同心：弹窗外框圆角 16、内边距 4，所以里面每一行的悬停 / 选中底色圆角是 12（账号菜单的行、Theme 选项、格式下拉、`Widgets.choice` 都是）。新写弹窗内的行也按"外圆角 − 内边距"取值。
+
+**主题**
+
+- `Theme.of(light, accent, opacity)` 按深 / 浅色、主题色和 Background Alpha 生成一套配色，`ClientSettings.colors()` 在三者变化时才重新生成。主题色就是 `iconHighlight`，悬停 / 选中底色（`selectorElementHover`、`selectorElementActive`）和滚动条拖动色由它算出。
+- Background Alpha 用 `Theme.fade` 乘到这些底色的 alpha 上：主窗口（`windowBg`）、侧栏（`categoryPanelBg`）、卡片和设置弹窗内卡片（`modulePanelBg`，`Controls` 的卡片色映射到它）、顶栏、弹窗玻璃底板（`Controls.c()` 里的 (20, 20, 29)）。后处理的模糊照常透出来，文字、控件和描边不受影响。HUD 水印有自己的 Background Alpha（模块设置），和这个分开。
+- `Controls` 里写死的强调色 (75, 126, 255) 由 `c()` 换成当前主题色，所以开关、滑条、选择框描边、导航选中图标都跟着变。HUD 的图标和 logo 蓝色层也用主题色（logo 层 alpha 0.8），通过 `Style` 传给 HUD 元素。
+- 浅色主题按参考图取色，是中性灰而不是偏蓝：内容区 (218, 218, 216)，侧栏 (182, 184, 180)，卡片 (229, 229, 229)，导航选中 (163, 163, 161)，正文 (52, 52, 52)，标题 (38, 38, 38)，未选中导航 (97, 100, 97)，分隔线 / 关闭的开关轨道 (210, 210, 210)，关闭的开关圆钮是白色。`c()` 把深色主题里写死的颜色映射到这些值；字标主色在浅色下用 `clientName`。
 - 窗口居中显示，可以按住空白处拖动；拖动过的位置在改窗口大小后保留。窗口放不下时自动缩小。
 
 ### 5.11 旋转
@@ -754,23 +838,25 @@ Minecraft 的偏航不取模，转几圈就会累积到 ±720° 之类的值。�
 | Blur Offset | 1～10 | 10 | 模糊采样偏移 |
 | Bloom Amount | 1～8 | 2 | 阴影金字塔层数 |
 | Bloom Offset | 1～10 | 2 | 阴影扩散距离；超过 2 时自动拆成更多层，见下方"怎么实现的" |
+| Shadow Opacity | 0～100% | 60% | 所有 UI 阴影的浓度，乘在阴影颜色的 alpha 上 |
 
 **在界面里用**
 
 ```java
 ImDrawList draw = ImGui.getWindowDrawList();
 draw.pushClipRectFullScreen();
-Effects.shadow(draw, minX, minY, maxX, maxY, rounding, 0, Colors.rgb(0, 0, 0));
 Effects.blur(draw, minX, minY, maxX, maxY, rounding, 0);
+Effects.shadow(draw, minX, minY, maxX, maxY, rounding, 0, Colors.rgb(0, 0, 0));
 draw.popClipRect();
 // 然后画这个元素自己的半透明底色、边框和内容
 ```
 
-- 两个方法都在元素背景**之前**调用，先阴影后模糊。模块关着、或者对应开关关着时什么都不画，没有开销。
+- 两个方法都在元素背景**之前**调用，**先模糊后阴影**。模块关着、或者对应开关关着时什么都不画，没有开销。
+- 顺序不能反：模糊会对当时的主画面取样，如果先合成阴影，这个形状自己的阴影会被模糊进玻璃里，边缘内侧出现一圈黑边（离线测试量到默认参数下最多暗 10/255）。阴影在形状内部是挖空的，所以先画模糊、再画阴影，外观不变，玻璃也干净。
 - 参数和 `addRectFilled` 一样（屏幕坐标、圆角、`ImDrawFlags`）。阴影颜色就是遮罩颜色：RGB 决定阴影颜色，alpha 决定阴影浓度。一般用黑色，想要彩色阴影就传主题色。同一组连续的阴影形状只用一种颜色（取 alpha 最大的那个）。
 - 阴影要画到元素外面，所以先 `pushClipRectFullScreen()`，否则会被窗口剪裁矩形切掉。
 - 效果命令是普通的 ImGui 形状，入场、翻页、弹窗动画会一起缩放和淡入淡出。
-- ClickGUI 的主窗口（`Panel`）和所有子窗口都已经接好：子窗口统一走 `Widgets.beginPopup`，它在弹窗玻璃底板之前加阴影和模糊，所以新加的弹窗自动带效果。阴影色统一用 `Controls.SHADOW`（不透明黑，边缘约 50%，往外渐隐）。
+- ClickGUI 的主窗口（`Panel`）和所有子窗口都已经接好：子窗口统一走 `Widgets.beginPopup`，它在弹窗玻璃底板之前加模糊和阴影，所以新加的弹窗自动带效果。阴影色统一用 `Controls.SHADOW`（不透明黑），实际浓度再乘 Shadow Opacity：默认 60% 时，边缘约 29%，往外渐隐。默认参数下阴影只扩散约 15 px，浓度太高就像一圈黑描边，所以默认值没有用 100%。
 - 阴影只出现在形状外面：挖空按形状的覆盖率算，不管遮罩颜色多透明，形状内部都完全挖掉。
 
 **怎么实现的**
@@ -781,10 +867,124 @@ draw.popClipRect();
 - Bloom Offset 越大，Kawase 每一遍的采样点隔得越远，超过约 2 个像素就会跳格，出现一圈圈台阶状的重影。所以 Offset 超过 2 时，每翻一倍就多降一层金字塔、步长减半，让每一遍的步长始终不超过 2。扩散范围基本不变，重影消失；Offset ≤ 2 时和原来完全一样。
 - 弹窗画在主窗口后面，所以弹窗的模糊会从已经画了主窗口的画面重新取样，阴影也会落在主窗口上。
 - 所有离屏 pass 都用剪裁矩形限制在效果区域加外扩的范围里（外扩量按层数和偏移算，离线测试验证过和整屏计算结果一致）。
-- 模糊只取 ImGui 之前的画面（游戏画面、原版 HUD 和前面合成的阴影），最多每 1/60 秒重算一次，改参数或窗口大小时立即重算。如果模糊命令前面已经画过别的 ImGui 内容，就从当前画面重新算，不节流。
+- 模糊只取 ImGui 之前的画面（游戏画面、原版 HUD，以及更早的元素合成的阴影；不含这个元素自己的阴影），最多每 1/60 秒重算一次，改参数或窗口大小时立即重算。如果模糊命令前面已经画过别的 ImGui 内容，就从当前画面重新算，不节流。
 - 着色器在 `assets/moonlight/shaders/core/`：`blur_down`、`blur_up`（模糊和阴影金字塔共用）、`bloom_cut`（挖空输出）、`shadow`（阴影合成）、`imgui_mask`（把阴影形状写进遮罩）、`imgui_blur`（顶点和片元各一个）。全屏 pass 的顶点着色器复用原版的 `core/screenquad`。
 - **着色器里不要用 `gl_FragCoord`。** 26.3 先按 Vulkan 规则用 shaderc 把 GLSL 编成 SPIR-V，再用 spvc 转成 OpenGL 的 GLSL；`gl_FragCoord` 的原点约定和 OpenGL 渲染目标的行序对不上，按它取样会上下颠倒，原版着色器也一处都没用。需要屏幕坐标时在顶点着色器里用 `gl_Position.xy / gl_Position.w * 0.5 + 0.5` 算出来再传下去（`imgui_blur.vsh` 就是这样），它和 `screenquad` 的 `texCoord` 约定一致。
 - 离屏目标第一次用到时才创建，模块关掉后释放。后处理出错只记一次日志并在本次运行里停用，ImGui 界面照常显示。
+
+### 5.13 HUD 水印
+
+Render 分类的 `Watermark` 模块，在屏幕上画一条胶囊，显示哪些段由 Items 勾选。
+
+| 设置项 | 范围 | 默认 | 说明 |
+|---|---|---|---|
+| Title | 文本 | `ML` | logo 的文字，留空就不画 logo |
+| Items | 多选 | Logo、FPS、User、Time、Avatar | 要显示的段，见下表；没勾的段连同前面的间距一起去掉 |
+| Position | 四个角 | Top Left | 锚定的角。在设置里选一个角时，X / Y 重置成 12，元素固定贴到这个角，和之前拖到哪里无关；拖动时自动改成离元素中心最近的角 |
+| X / Y | 隐藏 | 12 / 12 | 离锚定角的距离（设计单位），拖动时写入，选 Position 时重置，随配置保存 |
+| Scale | 0.5～3 | 1.5 | 1 设计单位 = Scale × HUD Scale（Client 设置，全局）× 系统显示缩放 个像素 |
+| Animation | 100～1000 ms | 300 ms | 展开 / 收起的时长 |
+
+Items 可选的段如下（`Watermark.Item`）。表里是默认顺序；在 Items 下拉框里拖动可以改，HUD 从左到右按改过的顺序画（`Watermark.items()` 返回勾选了的段，按用户顺序排好）。图标列是勾选列表里显示的图标，也是 HUD 上画的图标（Logo、Avatar 只在勾选列表里用）。
+
+| 段 | 图标 | 内容 | 拿不到时 |
+|---|---|---|---|
+| Logo | `dark_mode` | Title 文字，蓝色错位两层加白色顶层 | — |
+| FPS | `bar_chart` | `244 FPS 127  (1%L)` | — |
+| User | `person` | 账号名 | — |
+| Server | `dns` | `ServerData.ip`；单人世界显示 `Singleplayer` | `--` |
+| Ping | `wifi` | 自己在玩家列表里的 `getLatency()`，`42 ms` | `-- ms` |
+| TPS | `speed` | 服务器 TPS 估算值，`19.9 TPS` | `-- TPS` |
+| Coordinates | `location_on` | 脚下方块坐标，`x, y, z` | `--` |
+| Speed | `bolt` | 水平速度，`4.3 b/s` | `-- b/s` |
+| Version | `deployed_code` | `SharedConstants.getCurrentVersion().name()` | — |
+| Time | `history_2` | `HH:mm` | — |
+| Avatar | `account_circle` | 皮肤头像；在最左或最右时那一侧的边距是 4（其他段是 9 / 10），放在中间时和其他段一样隔 8 | — |
+
+**画在哪里**
+
+- `MoonlightClient` 给 `ImGuiManager` 的每帧回调里先调 `Hud.frame`（画所有 HUD 元素、处理编辑），再画 ClickGUI。HUD 画进 `ImGui.getBackgroundDrawList()`，按 F1 隐藏 HUD 时不画也不能编辑。
+- 背景和 ClickGUI 主窗口同一套：`Effects.blur` → `Effects.shadow`（黑色，alpha 0.7）→ 半透明黑底，圆角为高度的一半。阴影和模糊的强度跟随 `PostProcess`。
+- 跟随 Client 设置的主题：浅色时底色换成白色、文字和 logo 顶层换成深色 (28, 30, 38)，阴影 alpha 降到 0.3；图标和 logo 蓝色层用主题色。
+- 水印是每帧第一批 ImGui 命令，所以它的模糊按 5.12 的规则节流到 60 Hz。打开 ClickGUI 时，主窗口的模糊排在水印之后，会每帧重算，也会模糊到后面的水印。
+
+**排版**
+
+- 所有尺寸用"设计单位"写在 `WatermarkRenderer` 的常量里，来自设计稿：高 28，文字基线 18，图标和头像中心 13.5，段间距 8，图标到文字 2，FPS 和 1% low 之间 3，左边距 9，右边距：头像 4、文字 10。
+- 从左到右流式排列，宽度随内容变。
+- 每一段的横坐标也单独按同样的速率平滑（`WatermarkRenderer.slots`，设计单位，按 `Item` 下标存）：在 Items 里拖动换顺序时，各段从旧位置滑到新位置，互换的两段会交错滑过对方；某段勾选了重新出现时直接出现在目标位置，其余段滑开让位。
+- 换顺序时还有一次"呼吸"：只要显示的段集合没变、但先后顺序变了（真正的优先级交换，勾选 / 取消勾选不算），位置变了的段会变淡到约 55%（`BREATH` = 0.45），在最后一次交换后保持 0.18 秒（`BREATH_HOLD`），再按 `1 - e^(-10·dt)` 恢复，进出都是平滑的；拖着连续换好几格时一直保持淡的状态，松手后一起亮回来。位置没变的段不受影响。淡化作用在这一段的文字、图标、Logo 两层和头像上（`tone()`，头像通过 `Textures.face` 的 tint 参数）。
+- 宽度和左上角位置都按 `1 - e^(-12·dt)` 平滑：内容变宽变窄，或者在设置里改 Position 时，背景连同内容滑到新的角，不会跳。两者速率相同，所以贴右边时宽度变化，右边缘仍然不动。拖动时位置直接跟着鼠标，不做平滑。
+- 模块开关时从所在角那一侧按 easeOutCubic 展开 / 收起，内容按可见部分裁剪。
+- 新加的段（Server、Ping、TPS、Coordinates、Speed、Version）用 13 的图标框，和时间一样；FPS、User 用 15。
+- 数字（FPS、1% low、Ping、TPS、Speed、时间）每一位放在"最宽数字"那么宽的格子里居中，位数不变时宽度不会抖；某一位变化时旧字符向上滑出、新字符从下方滑入，同时交叉淡化：旧字符透明度是 `(1 - e)²`，新字符是 `e²`（`e` 是 easeOutCubic 后的进度），滚到一半时两个字符都只剩约 25%，不会叠成一团。` FPS`、`  (1%L)` 这些后缀不动。
+- **ImGui 字号不是 em。** stb 后端用 `stbtt_ScaleForPixelHeight`，把 ascent − descent 映射到字号。设计稿里的 em 字号要乘 `Fonts.HUD_EM`（Inter 1.2100）、`HUD_ICON_EM`（1.2）、`WORDMARK_EM`（1.2）；文字顶部 = 基线 − em × `*_ASCENT`。换别的字体时要按它的 `hhea` 重新算这两个系数。
+- ImGui 画文字时会把坐标截断到整像素，所以位置都先 `Math.round` 再传进去。
+
+**数据**
+
+- FPS 和 1% low：每个 ImGui 帧记一次 `io.deltaTime`，保留最近 5 秒（最多 4096 帧），每 0.5 秒重算：FPS = 最近 1 秒的帧数 / 这些帧的总时长；1% low = 最慢的 1% 帧（至少 1 帧）的平均时长的倒数。
+- Server、Ping、TPS、Coordinates、Speed、Version 由 `Tracker` 提供（`MoonlightClient` 创建并注册到事件总线），渲染器每帧取一次 `Snapshot`：
+  - TPS：收到 `ClientboundSetTimePacket` 时记下（到达时间, `gameTime`），保留最近 6 个，TPS = 游戏刻差 / 真实秒数，夹在 0～20。游戏刻倒退、两包间隔超过 10 秒或换世界时清空；最近一包超过 10 秒也算拿不到。收包在网络线程，所以加了锁。
+  - Speed：每个 tick 结束时按 `(x - xo, z - zo)` 的长度 × 20 算 b/s。
+  - 测试里直接传一个固定的 `Snapshot`，不依赖游戏。
+- 头像：在世界里取 `player.getSkin()`，不在时用 `SkinManager.createLookup(mc.getGameProfile(), false)`，画皮肤的脸（UV 8–16）再叠帽子层（UV 40–48），圆形裁剪。
+
+**编辑 HUD（拖动和右键设置）**
+
+- 打开聊天栏或 ClickGUI 时进入编辑模式。
+  - 鼠标移到 HUD 元素上会出现一圈白色描边，ClickGUI 里光标同时变成移动形状。
+  - 按住左键拖动：元素跟着鼠标走，不会拖出屏幕。松开后按元素中心落在哪个象限，选最近的角作为 Position，并把离这个角的距离写进 X / Y。换分辨率后，元素仍然贴着同一个角。
+  - 拖动时的辅助线和吸附（`Hud.drag`）：被拖元素的左边 / 中线 / 右边去对屏幕竖直中线以及其他 HUD 的左边 / 中线 / 右边，上边 / 中线 / 下边同理去对屏幕水平中线和其他 HUD 的上 / 中 / 下。距离在 6 px（乘系统显示缩放）以内就吸过去，横竖两个方向各自取最近的一条。吸上的那条画成贯穿屏幕的主题色细线（alpha 200，粗 1 × 显示缩放，画在背景层，所以在 HUD 上面、ClickGUI 窗口下面），按 `1 - e^(-18·dt)` 淡入淡出。
+  - 右键打开这个模块的设置弹窗，内容和 ClickGUI 里点 `...` 打开的设置弹窗一样（Bind 加全部可见设置项）。离开编辑模式（关掉聊天栏或 ClickGUI）时弹窗自动关闭。
+- **设置弹窗的位置**：锚在 HUD 元素的矩形上，`Hud` 每帧把矩形交给 `Panel.follow`。
+  - 最佳位置：HUD 右侧、和顶部对齐；右边放不下放左侧；两侧都放不下放到下方（下方也放不下就上方）；最后夹在屏幕内。
+  - 弹窗按 `1 - e^(-12·dt)` 平滑地滑向最佳位置，所以 HUD 换角或被拖走时弹窗跟着动画移动。
+  - 按住弹窗顶部标题栏可以手动拖动，松手后停在那里。之后 HUD 只是变宽变窄（比如勾选 Items）不会动它；HUD 真正移动（左右两边同时变或上边变了）时取消手动位置，重新滑到最佳位置。
+  - HUD 弹窗关掉了 ImGui 自己的窗口拖动（`NoMove`），只用标题栏拖，免得和每帧设置的位置抢。
+- 鼠标在 ClickGUI 窗口或设置弹窗上时不算悬停 HUD，所以面板下面的 HUD 不会被误拖。
+- **聊天栏里的输入**：原版只把输入交给 `ChatScreen`，`Hud` 监听输入事件，自己转发给 ImGui。
+  - 鼠标移动（`MouseMoveEvent`）和按键都转发。按下时，如果鼠标在 HUD 元素或弹窗上，或者正在拖动，就取消原版处理，不点到聊天里的文字；对应的松开也一并取消。
+  - 设置弹窗里的文本框获得焦点时，按键（`KeyInputEvent`）和字符（`CharInputEvent`）都交给 ImGui 并取消原版处理，打的字不会进聊天框；Esc 只退出文本框，不关聊天栏。
+  - 打开聊天栏时给 ImGui 发获得焦点和当前鼠标位置；关掉时（不是切到 ClickGUI）发失去焦点并把鼠标移出窗口，清掉 ImGui 里残留的按键状态。
+- ClickGUI 打开时输入由 `ClickGuiScreen` 照常转发，`Hud` 只做悬停和拖动判断。
+- 弹窗由 `Panel.settings(module)` 打开，用 `Row.popup` 画，和 ClickGUI 里的设置弹窗是同一个。
+  - 面板没打开、只有 HUD 弹窗时，`Panel.frame(open, editing)` 也会套上 ClickGUI 的主题、字体和弹窗淡出。面板和 HUD 弹窗都没有时，`Panel.frame` 仍会调用 `popups.drawClosing()` 把刚关掉的弹窗淡出播完。以前这时不渲染，淡出停在第一帧，下次打开别的 HUD 弹窗时旧弹窗会闪一下。
+  - 弹窗跟着 HUD 走，包括拖弹窗里的 Scale 滑条时：HUD 实时变大，弹窗同时滑过去。这要求滑条按相对位移计算（见下面的 `Controls.slider`），否则滑条跟着弹窗移动会和鼠标位置互相拉扯。
+  - 缩放和面板分开：面板用 Size，HUD 弹窗用 Client 页的 HUD Menu Size（默认 125%），各乘系统显示缩放。两者同时显示时，`Panel` 分两遍画，每遍各自缩放样式。
+- **新加 HUD 元素**：实现 `HudElement`。
+  - `bounds()`：这一帧实际画出来的矩形，没画时返回 null。
+  - `place(x, y)`：拖动时传入的新左上角像素坐标，元素自己换算成锚点和偏移，并在下一次 `frame()` 直接跳到那里。
+  - `frame(Style)`：绘制；`Style` 带全局 HUD Scale、深 / 浅色和主题色。
+  - `module()`：右键打开哪个模块的设置。
+  - 然后在 `MoonlightClient` 里加进 `Hud` 的列表。
+
+**游戏纹理**
+
+ImGui 的纹理 ID 本来只对应 ImGui 自己的图集。`Textures.of(Identifier)` 给游戏纹理分配一个 `2^40` 起的 ID，渲染时 `ImGuiRenderer` 按 ID 从 `TextureManager` 取 `GpuTextureView`，并用 `NEAREST` 采样（皮肤是像素画）；ImGui 自己的纹理仍用 `LINEAR`。头像用 `Textures.face(draw, skin, x, y, r, tint)` 画，`tint` 带透明度，水印的"呼吸"淡化就靠它。
+
+**位置（`module.Anchor`）**
+
+水印和热键列表共用：构造时 `new Anchor(this, x, y)` 往模块里登记 Position（四个角）和隐藏的 X / Y（离锚定角的设计单位距离），所以它们在设置里的位置就是 `Anchor` 字段声明的位置。`left(screen, width, unit)` / `top(...)` 算出左上角像素坐标；`drop(...)` 是拖动松手时用的：夹在屏幕内，按中心落在哪个象限选角，再换算偏移。在设置里选 Position 会把 X / Y 重置成 12。
+
+### 5.14 热键列表 HUD
+
+Render → Overlay 的 `Hotkeys` 模块，按设计稿的 Hotkeys 组画（`ui.hud.HotkeysRenderer`）。设置只有 Position（默认左上，X 12、Y 52，正好在水印下面）和 Scale（0.5～3，默认 1.5）。
+
+| 部分 | 设计稿（设计单位） |
+|---|---|
+| 标题胶囊 | 高 22、圆角 10，黑色 70% 底 + 背景模糊 + 阴影（黑色 70%）；`auto_awesome_mosaic` 图标 12 × 12 放在 (7, 5)，主题色；"Hotkeys" 用 Inter Regular 10.5，白色，x = 29，按大写字母高度上下居中（基线 14.82）；右边留 9，整体宽约 79 |
+| 每一行 | 两个小胶囊：左边是按键名，右边是模块名。高 18、圆角 4，底色 (40, 32, 43) 60% + 背景模糊 + 阴影（设计稿里小胶囊没有阴影，这里补上，和标题一样）；文字 Inter Regular 10，白色，左右各留 4.5（设计稿里量出来 3.2～5.5，取平均）；上下按大写字母高度（`Fonts.HUD_CAP` = 1490 / 2048）居中，基线 12.64。设计稿的基线是 11.64，大写字母会偏上约 1，这里有意改成居中 |
+| 间距 | 标题和第一行、行与行、左右两列之间都是 6；右列的 x 是左列最宽的胶囊 + 6 |
+
+- 哪些热键会出现：Visible 打开、录了键、并且正在生效的热键。Toggle 热键在模块开着时生效，Hold 热键在按住时生效。一个模块有几个这样的热键就有几行。
+- 新出现的行按 `1 - e^(-14·dt)` 淡入，消失的行淡出，同时下面的行平滑收上来（行距乘淡入进度）；左列宽度和整体位置按 `1 - e^(-12·dt)` 平滑。模块开关时整体 0.3 秒淡入 / 淡出。
+- 分三遍画（`Pass`）：先给标题和所有胶囊画模糊，再画阴影，最后画底色、图标和文字。这样所有模糊连成一段只烘焙一次，所有阴影连成一段，`ImGuiRenderer` 只做一次 bloom，而不是每个胶囊各做一次；同时保证先模糊后阴影（5.12），阴影不会漏进玻璃里。
+- 淡入淡出时背景模糊也跟着变淡：`Effects.blur` 多了一个带透明度的重载，模糊区域按顶点透明度混合，不会先冒出一块模糊。
+- 浅色主题：标题和小胶囊换成白色 70% / 60% 底，文字用深色，阴影变浅，和水印一致。
+- 底色透明度都再乘 Client 设置里的 HUD Alpha（见 5.10），水印的黑 / 白底（70%）也一样，模块里不再单独有 Background Alpha。
+- 编辑模式下没有生效的热键时只有标题，可以照常拖动和右键打开设置。
+- 列表和 ClickGUI 共用 `Hud`：`MoonlightClient` 里和水印一起加进 `Hud` 的列表。
 
 ---
 
@@ -829,10 +1029,11 @@ draw.popClipRect();
 
 ```
 Moonlight                  ← 根项目（控制器）
-├─ Tasks → application     → 26.3-fabric-client、26.3-neoforge-client、buildAllJars
+├─ Tasks → application     → 26.3-fabric-client、26.3-neoforge-client、buildAllJars、ui-preview
 ├─ Tasks → stonecutter     ← 切换激活节点
 ├─ 26.3-fabric
 │   └─ Tasks → build       → build、buildAndCollect
+│            → application → previewUi
 │            → fabric      → runClient、runServer
 └─ 26.3-neoforge
     └─ Tasks → build       → build、buildAndCollect
@@ -845,8 +1046,9 @@ Moonlight                  ← 根项目（控制器）
 | `26.3-fabric-client` | 启动 Fabric 客户端（执行 `:26.3-fabric:runClient`） |
 | `26.3-neoforge-client` | 启动 NeoForge 客户端（执行 `:26.3-neoforge:runClient`） |
 | `buildAllJars` | 同时构建 Fabric 和 NeoForge，jar 汇总到根目录的 `build/libs/<版本>/` |
+| `ui-preview` | 不启动游戏，单独开一个窗口预览 ClickGUI 和 HUD（执行 `:26.3-fabric:previewUi`，见 8.6） |
 
-- 这三个任务都定义在 `stonecutter.gradle`。`<节点>-client` 按子项目自动生成，`buildAllJars` 依赖所有节点的 `buildAndCollect`，以后新增 Minecraft 版本节点时都会自动包含，不用改。
+- 这几个任务都定义在 `stonecutter.gradle`。`<节点>-client` 按子项目自动生成，`buildAllJars` 依赖所有节点的 `buildAndCollect`，以后新增 Minecraft 版本节点时都会自动包含，不用改。
 - 右键这些任务选"调试"，IDEA 会把调试器挂到游戏进程上。
 - 只构建 Fabric 版：双击 `26.3-fabric → Tasks → build → build`
 - 只构建 NeoForge 版：双击 `26.3-neoforge → Tasks → build → build`
@@ -869,7 +1071,7 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 
 ### 8.2 IDEA 的运行 / 调试配置
 
-每次 Gradle 同步完成后，IDEA 会自动在右上角的运行 / 调试配置里创建这五个，全部是 Gradle 类型：
+每次 Gradle 同步完成后，IDEA 会自动在右上角的运行 / 调试配置里创建这六个，全部是 Gradle 类型：
 
 | 配置 | 执行的 Gradle 任务 | 作用 |
 |---|---|---|
@@ -878,10 +1080,11 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 | `26.3-neoforge-client` | `:26.3-neoforge:runClient` | 启动 NeoForge 客户端 |
 | `26.3-neoforge-server` | `:26.3-neoforge:runServer` | 启动 NeoForge 服务端 |
 | `buildAllJars` | `buildAllJars` | 同时构建两个加载器的 jar |
+| `ui-preview` | `:26.3-fabric:previewUi` | 不启动游戏预览 ClickGUI 和 HUD |
 
 实现方式：
 
-- 根项目应用了 JetBrains 的 `idea-ext` 插件（1.2，和 ModDevGradle 内部用的是同一个版本）。这五个配置都在 `stonecutter.gradle` 里注册到 `idea.project.settings.runConfigurations`，IDEA 同步时读取并创建，不需要在仓库里放 `.run` / `.idea` 的 xml 文件。
+- 根项目应用了 JetBrains 的 `idea-ext` 插件（1.2，和 ModDevGradle 内部用的是同一个版本）。这些配置都在 `stonecutter.gradle` 里注册到 `idea.project.settings.runConfigurations`，IDEA 同步时读取并创建，不需要在仓库里放 `.run` / `.idea` 的 xml 文件。
 - `<节点>-client` / `<节点>-server` 按子项目自动生成，以后新增版本节点会自动多出对应的配置。
 - 配置直接执行 Loom / ModDevGradle 的 `runClient` / `runServer` 任务，所以构建脚本里给运行加的参数（DevAuth、`-Dmixin.debug.export` 等）、启动前的准备任务（生成 `launch.cfg`、下载资源、NeoForge 的 `prepareClientRun`）都由 Gradle 处理，和命令行运行完全一致。点"调试"时 IDEA 会把调试器挂到 Gradle 启动的游戏进程上。
 - 加载器自己生成的 IDE 运行配置都已关闭：Loom 是 `ideConfigGenerated(false)`，ModDevGradle 是两个 `runs` 里的 `disableIdeRun()`。否则同步后会多出它们默认的"应用程序"类型配置。
@@ -898,6 +1101,7 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 | 两个都构建（不汇总） | `./gradlew build` |
 | 启动 Fabric 客户端 | `./gradlew :26.3-fabric:runClient` |
 | 启动 NeoForge 客户端 | `./gradlew :26.3-neoforge:runClient` |
+| 不启动游戏预览 ClickGUI 和 HUD | `./gradlew ui-preview`（等同 `./gradlew :26.3-fabric:previewUi`） |
 
 产物位置：
 
@@ -930,6 +1134,30 @@ IDEA 在根项目下列出的是"可以从根项目运行的任务"，也就是�
 - `org.gradle.configuration-cache=true`：开启配置缓存。修改构建脚本时注意第 10 节的写法要求。
 - `org.gradle.configuration-cache.problems=warn`：配置缓存遇到不兼容的写法时只警告、不中断构建。IDEA 设成"使用 Gradle 构建和运行"时，如果运行"应用程序"类型的配置（比如自己在 IDEA 里新建的），IDEA 会临时生成一个初始化脚本交给 Gradle 执行。这个脚本注册了构建监听器，还在执行阶段访问 `Task.project`，两者都不兼容配置缓存；不加这一行就会报 `Invocation of 'Task.project' ... is unsupported with the configuration cache`。平时构建仍然正常使用配置缓存，只是自己写的脚本出了兼容问题也只会显示成警告，要留意构建输出里的 `problems were found`。
 - `dev.kikugie.stonecutter.hard_mode=true`：关闭 Stonecutter 每次构建都打印的"推荐使用 Kotlin DSL"提示。项目有意使用 Groovy。
+
+### 8.6 不启动游戏预览 UI（ui-preview）
+
+调 ClickGUI 和 HUD 的样式时不用每次都进游戏：运行根项目 `application` 分组的 `ui-preview`（或者 IDEA 里同名的运行配置、命令行 `./gradlew ui-preview`），会直接打开一个 "Moonlight UI Preview" 窗口，里面跑的是和游戏里同一套 `Panel`、`Hud`、`WatermarkRenderer`、主题和设置项。
+
+| 文件 | 作用 |
+|---|---|
+| `src/preview/java/wtf/moonlight/ui/imgui/Preview.java` | 入口：SDL3 窗口 + OpenGL 3.3 上下文，`ImGuiImplSdl3` 处理输入，每帧调用 `hud.frame(true, true)` 和 `panel.frame(open, true)` |
+| `src/preview/java/wtf/moonlight/ui/imgui/PreviewRenderer.java` | 直接用 OpenGL 画 ImGui 的绘制数据，按 1.92 的动态纹理流程创建 / 更新 / 销毁字体纹理；遍历命令的方式和游戏里的 `ImGuiRenderer` 一样（先模糊后阴影、连续的阴影命令合并成一次） |
+| `src/preview/java/wtf/moonlight/ui/imgui/PreviewPost.java` | 后处理：把 `post/Blur`、`post/Bloom`、`post/Kawase` 的流程照搬成 OpenGL 调用 |
+| `src/preview/java/wtf/moonlight/ui/imgui/Program.java`、`Target.java` | 着色器程序和离屏帧缓冲的小封装 |
+
+- 源码集 `preview` 只在 `build.fabric.gradle` 里定义，编译时依赖 `main` 的输出和类路径，**不会打进模组 jar**。Stonecutter 会自动把它映射到根目录的 `src/preview/java`，和 `main` 一样。
+- 这些类放在 `wtf.moonlight.ui.imgui` 包里，是为了直接用包内的 `Natives`、`Textures`、`Effects` 和 `ImGuiManager.setup(scale)`，不用反射。
+- 操作：右 Shift 开关 ClickGUI；HUD 一直处于编辑状态，左键拖动、右键打开它的设置弹窗；关窗口就退出。
+- 窗口大小是主显示器可用区域的 80%，UI 缩放取窗口所在显示器的缩放（和游戏里 `ImGuiManager` 的取法一样）。
+- 背景是游戏的 `panorama_0.png`。jar 里的这张只是 1×1 占位图，真正的图片在 Loom 下载的资源目录里，`previewUi` 通过 `-Dmoonlight.assets` 把 `<Gradle 用户目录>/caches/fabric-loom/assets` 传进去，`Preview` 按当前版本号找资源索引再取文件。找不到就用纯色背景。
+- 模糊和阴影：整帧先画到一张离屏纹理（`Target`），这样模糊才能采样到已经画好的背景和 UI，最后再整张拷到窗口。降采样、升采样、阴影的裁切和着色直接读游戏的 `blur_down.fsh`、`blur_up.fsh`、`bloom_cut.fsh`、`shadow.fsh`，参数（Blur Amount / Offset、Bloom Amount / Offset、Shadow Opacity）也读 PostProcess 模块，所以效果和游戏里一致。全屏三角形的顶点着色器是 `PreviewPost.SCREEN`，对应游戏的 `screenquad.vsh`（游戏那份用的是 `gl_VertexIndex`，原生 OpenGL 要换成 `gl_VertexID`）。
+- 假数据：玩家名 `Steve`、默认 Steve 皮肤、服务器 `localhost`，延迟和速度会缓慢变化，方便看数字滚动动画；版本号是真实的 `SharedConstants` 版本。
+- 预览启动时会调用 `Bootstrap.bootStrap()`（`Scaffold` 的方块列表需要注册表），并默认开启 PostProcess、Watermark 和 Hotkeys。
+- 热键：26.3 的键码就是 SDL scancode，所以 `Preview` 把 SDL 的按键事件直接包成 `KeyInputEvent`（`KeyEvent(scancode, keycode, mod)`，动作用 `InputConstants.PRESS / REPEAT / RELEASE`）发到 `Moonlight.EVENT_BUS`，上面注册了 `BindManager` 和 `BindCapture`。正在往输入框打字时不转发。所有模块的触发条件换成"没在输入文字"（默认条件要查游戏界面，预览里没有）。这样在预览里也能录热键、按热键，热键列表 HUD 会跟着亮起；鼠标键绑定在预览里不转发。
+- 保存设置：配置存在 `run/preview/configs/`，和游戏的配置分开。`Preview` 给 `ConfigManager` 单独建了一条 `EventBus`，启动时发一次 `GameLoadedEvent`（读 `latest.json`），之后每 50 ms 发一次 `TickEvent.PRE`，所以和游戏里一样，设置有变化时大约每秒自动写一次 `latest.json`，正常关窗口时也会再存一次。这条总线上只有 `ConfigManager`，模块的 Tick 监听不会被触发。
+- 开关需要游戏实例的模块（比如 FullBright、Scaffold）会在 `onEnable` 里抛空指针。预览会捕获这一帧的异常、恢复 ImGui 样式并打印警告，窗口继续运行。读配置时 `ConfigManager` 会单独捕获每个模块开关的异常，所以就算 `latest.json` 里这些模块是开着的，其他设置也照常读进来。
+- `previewUi` 会先编译 `main`。游戏客户端开着的时候运行它，会改写客户端正在用的 class 文件，最好先关掉游戏再预览。
 
 ---
 
