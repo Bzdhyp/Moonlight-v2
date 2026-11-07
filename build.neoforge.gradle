@@ -6,11 +6,13 @@ def javaVersion = 25
 def modId = property("mod.id").toString()
 def modVersion = property("mod.version").toString()
 def neoVersion = property("deps.neo_loader").toString()
+def imguiVersion = property("deps.imgui").toString()
 
 version = "${modVersion}+${sc.current.version}".toString()
 base.archivesName = modId + "-neoforge"
 
 repositories {
+    mavenCentral()
     exclusiveContent {
         forRepository {
             maven {
@@ -24,6 +26,15 @@ repositories {
 
 dependencies {
     runtimeOnly "me.djtheredstoner:DevAuth-neoforge:${property("deps.devauth")}"
+
+    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
+    jarJar "io.github.spair:imgui-java-binding:${imguiVersion}"
+    implementation("io.github.spair:imgui-java-lwjgl3:${imguiVersion}") { exclude group: "org.lwjgl" }
+    jarJar("io.github.spair:imgui-java-lwjgl3:${imguiVersion}") { exclude group: "org.lwjgl" }
+    ["windows", "linux", "macos"].each { os ->
+        runtimeOnly "io.github.spair:imgui-java-natives-${os}:${imguiVersion}"
+        jarJar "io.github.spair:imgui-java-natives-${os}:${imguiVersion}"
+    }
 }
 
 neoForge {

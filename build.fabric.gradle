@@ -6,11 +6,13 @@ def javaVersion = 25
 def modId = property("mod.id").toString()
 def modVersion = property("mod.version").toString()
 def fabricLoader = property("deps.fabric_loader").toString()
+def imguiVersion = property("deps.imgui").toString()
 
 version = "${modVersion}+${sc.current.version}".toString()
 base.archivesName = modId + "-fabric"
 
 repositories {
+    mavenCentral()
     exclusiveContent {
         forRepository {
             maven {
@@ -27,6 +29,15 @@ dependencies {
     implementation "net.fabricmc:fabric-loader:${fabricLoader}"
     implementation "net.fabricmc.fabric-api:fabric-api:${property("deps.fabric_api")}"
     runtimeOnly "me.djtheredstoner:DevAuth-fabric:${property("deps.devauth")}"
+
+    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
+    include "io.github.spair:imgui-java-binding:${imguiVersion}"
+    implementation("io.github.spair:imgui-java-lwjgl3:${imguiVersion}") { exclude group: "org.lwjgl" }
+    include("io.github.spair:imgui-java-lwjgl3:${imguiVersion}") { exclude group: "org.lwjgl" }
+    ["windows", "linux", "macos"].each { os ->
+        runtimeOnly "io.github.spair:imgui-java-natives-${os}:${imguiVersion}"
+        include "io.github.spair:imgui-java-natives-${os}:${imguiVersion}"
+    }
 }
 
 loom {

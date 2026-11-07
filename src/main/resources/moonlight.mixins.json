@@ -3,10 +3,28 @@
   "minVersion": "0.8",
   "package": "wtf.moonlight.mixin",
   "compatibilityLevel": "${java}",
-  "mixins": [
-    "MinecraftServerMixin"
+  "client": [
+    "ClientPacketListenerMixin",
+    "CommandSuggestionsMixin",
+    "ConnectionMixin",
+    "EntityMixin",
+    "GameRendererMixin",
+    "GuiMixin",
+    "HudMixin",
+    "ItemMixin",
+    "KeyboardHandlerMixin",
+    "KeyboardInputMixin",
+    "LightmapRenderStateExtractorMixin",
+    "LivingEntityMixin",
+    "LivingEntityRendererMixin",
+    "LocalPlayerMixin",
+    "MinecraftAccessor",
+    "MinecraftMixin",
+    "MouseHandlerMixin",
+    "MultiPlayerGameModeMixin",
+    "PlayerMixin",
+    "SDLEventHandlerMixin"
   ],
-  "client": [],
   "injectors": {
     "defaultRequire": 1
   }
